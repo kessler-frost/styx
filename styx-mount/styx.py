@@ -1,5 +1,5 @@
 def main():
-    print("Hello from styx!")
+    print("Hello from styx-mount!")
 
 
 if __name__ == "__main__":
