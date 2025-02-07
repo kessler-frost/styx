@@ -175,4 +175,4 @@ cython_debug/
 .python-version
 
 # weedfs
-weed_mount.out
+./*.out
