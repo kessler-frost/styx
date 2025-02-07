@@ -1,0 +1,23 @@
+mount point owner uid=1000 gid=1000 mode=drwxr-xr-x
+I0206 22:33:03.484760 needle_map_leveldb.go:122 generateLevelDbFile /tmp/2bb6e800/c0_2_0.ldb, watermark 0, num of entries:0
+I0206 22:33:03.486649 needle_map_leveldb.go:66 Loading /tmp/2bb6e800/c0_2_0.ldb... , watermark: 0
+I0206 22:33:03.488322 needle_map_leveldb.go:122 generateLevelDbFile /tmp/2bb6e800/c0_2_1.ldb, watermark 0, num of entries:0
+I0206 22:33:03.490106 needle_map_leveldb.go:66 Loading /tmp/2bb6e800/c0_2_1.ldb... , watermark: 0
+I0206 22:33:03.492191 needle_map_leveldb.go:122 generateLevelDbFile /tmp/2bb6e800/c1_3_0.ldb, watermark 0, num of entries:0
+I0206 22:33:03.494655 needle_map_leveldb.go:66 Loading /tmp/2bb6e800/c1_3_0.ldb... , watermark: 0
+I0206 22:33:03.497836 needle_map_leveldb.go:122 generateLevelDbFile /tmp/2bb6e800/c1_3_1.ldb, watermark 0, num of entries:0
+I0206 22:33:03.500319 needle_map_leveldb.go:66 Loading /tmp/2bb6e800/c1_3_1.ldb... , watermark: 0
+I0206 22:33:03.502116 needle_map_leveldb.go:122 generateLevelDbFile /tmp/2bb6e800/c1_3_2.ldb, watermark 0, num of entries:0
+I0206 22:33:03.503957 needle_map_leveldb.go:66 Loading /tmp/2bb6e800/c1_3_2.ldb... , watermark: 0
+I0206 22:33:03.505889 needle_map_leveldb.go:122 generateLevelDbFile /tmp/2bb6e800/c2_2_0.ldb, watermark 0, num of entries:0
+I0206 22:33:03.508190 needle_map_leveldb.go:66 Loading /tmp/2bb6e800/c2_2_0.ldb... , watermark: 0
+I0206 22:33:03.511266 needle_map_leveldb.go:122 generateLevelDbFile /tmp/2bb6e800/c2_2_1.ldb, watermark 0, num of entries:0
+I0206 22:33:03.513116 needle_map_leveldb.go:66 Loading /tmp/2bb6e800/c2_2_1.ldb... , watermark: 0
+I0206 22:33:03.513215 leveldb_store.go:47 filer store dir: /tmp/2bb6e800/meta
+I0206 22:33:03.513230 file_util.go:27 Folder /tmp/2bb6e800/meta Permission: -rwxr-xr-x
+I0206 22:33:03.566059 wfs_filer_client.go:31 WithFilerClient 0 styx-prime:18888: filer: no entry is found in filer store
+I0206 22:33:03.566083 filer_conf.go:41 fuse filer conf /etc/seaweedfs/filer.conf not found
+I0206 22:33:03.566107 mount_std.go:282 mounted styx-prime:8888/ to ./styx-mount
+I0206 22:33:03.566123 mount_std.go:283 This is SeaweedFS version 30GB 3.84 5e46960651b68add6be02d93f34183218d8ca431 linux amd64
+I0206 22:39:34.913423 needle_map_leveldb.go:122 generateLevelDbFile /tmp/2bb6e800/c0_2_0.ldb, watermark 0, num of entries:0
+I0206 22:39:34.915424 needle_map_leveldb.go:66 Loading /tmp/2bb6e800/c0_2_0.ldb... , watermark: 0
