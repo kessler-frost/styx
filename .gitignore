@@ -176,3 +176,6 @@ cython_debug/
 
 # weedfs
 *.out
+
+# vscode
+.vscode
