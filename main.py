@@ -1,8 +1,6 @@
-import fastapi
+def main():
+    print("Hello from styx!")
 
 
-app = fastapi.FastAPI()
-
-@app.get("/")
-async def read_root():
-    return {"Hello": "World"}
+if __name__ == "__main__":
+    main()
