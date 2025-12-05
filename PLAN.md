@@ -9,29 +9,31 @@
 
 ---
 
-## Phase 1: Foundation
+## Phase 1: Foundation ✓
 **Goal**: Run Apple Containers via Nomad locally
 
 - [x] Create Nomad task driver skeleton
 - [x] Implement container CLI wrapper
 - [x] Basic lifecycle: start, stop, destroy
 - [x] Parse container inspect output
-- [~] Test with `nomad agent -dev`
+- [x] Test with `nomad agent -dev`
 
-**Deliverable**: `nomad job run` launches an Apple Container
+**Deliverable**: `nomad job run` launches an Apple Container (COMPLETE)
 
 ---
 
-## Phase 2: Cluster Basics
+## Phase 2: Cluster Basics [~]
 **Goal**: Multiple Macs form a cluster
 
-- [ ] Styx launcher CLI skeleton (cobra)
-- [ ] Download/manage Nomad binary
-- [ ] Generate Nomad server/client configs
-- [ ] launchd service integration
-- [ ] `styx init` / `styx join` commands
+- [x] Styx launcher CLI skeleton (cobra)
+- [x] Download/manage Nomad binary (prerequisite: `brew install nomad`)
+- [x] Generate Nomad server/client configs
+- [x] launchd service integration
+- [x] `styx init` / `styx join` commands
 
 **Deliverable**: 2+ Macs running as Nomad cluster
+
+**Status**: CLI implemented, needs testing on actual multi-Mac setup
 
 ---
 

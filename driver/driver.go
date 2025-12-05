@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -163,9 +164,12 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 
 	d.logger.Info("starting task", "task_id", cfg.ID, "image", taskConfig.Image)
 
+	// Sanitize container name - Apple container CLI doesn't allow slashes
+	containerName := strings.ReplaceAll(cfg.ID, "/", "-")
+
 	// Build run options
 	opts := container.RunOptions{
-		Name:       cfg.ID,
+		Name:       containerName,
 		Image:      taskConfig.Image,
 		Command:    taskConfig.Command,
 		Args:       taskConfig.Args,

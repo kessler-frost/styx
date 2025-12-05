@@ -9,8 +9,32 @@ Styx is a distributed system platform for Mac fleets using Apple Containers and 
 ## Important Files
 
 - `PLAN.md` - Living implementation plan with phases and checkboxes
+- `TEST.md` - Testing requirements for each phase (run after completing a phase)
 - `driver/` - Nomad task driver for Apple Containers
-- `cmd/styx/` - Main CLI launcher
+- `cmd/styx/` - Main CLI launcher (`styx init`, `styx join`, `styx stop`)
+- `internal/` - Internal packages (config, launchd, network)
+- `example/` - Sample Nomad job specs for testing (alpine, nginx, ubuntu)
+
+## Directory Structure
+
+```
+styx/
+├── cmd/styx/           # CLI commands
+│   ├── main.go         # Entry point
+│   ├── root.go         # Root command with global flags
+│   ├── init.go         # styx init --server
+│   ├── join.go         # styx join <server-ip>
+│   ├── stop.go         # styx stop
+│   └── version.go      # styx version
+├── driver/             # Nomad task driver plugin
+├── internal/
+│   ├── config/         # Nomad HCL config generation
+│   ├── launchd/        # macOS launchd plist management
+│   └── network/        # IP detection utilities
+├── example/            # Sample Nomad job specs
+├── plugins/            # Built plugin binary
+└── bin/                # Built CLI binary
+```
 
 ## Rules
 
@@ -55,5 +79,15 @@ Examples:
 
 ### Testing
 
-- Test task driver with `nomad agent -dev`
+- **After completing a phase**: Run the corresponding tests in `TEST.md`
+- **Quick smoke test**: See the "Quick Smoke Test" section in TEST.md
+- Test task driver with `make dev` (builds plugin and starts Nomad in dev mode)
 - Use `container` CLI directly to verify behavior before wrapping
+- Example jobs in `example/` directory: alpine.nomad, nginx.nomad, ubuntu.nomad
+
+### When Completing a Phase
+
+1. Run all tests for that phase from TEST.md
+2. Mark all phase tasks as `[x]` in PLAN.md
+3. Add checkmark to phase header in PLAN.md (e.g., `## Phase 1: Foundation ✓`)
+4. Commit changes

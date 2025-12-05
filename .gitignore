@@ -4,7 +4,8 @@
 *.dll
 *.so
 *.dylib
-styx
+/styx
+/bin/styx
 nomad-driver-apple-container
 
 # Test binary

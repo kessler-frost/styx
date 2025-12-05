@@ -1,15 +1,15 @@
-job "alpine" {
+job "ubuntu" {
   datacenters = ["dc1"]
   type        = "service"
 
   group "test" {
     count = 1
 
-    task "alpine" {
+    task "ubuntu" {
       driver = "apple-container"
 
       config {
-        image   = "alpine:latest"
+        image   = "ubuntu:latest"
         command = "sleep"
         args    = ["3600"]
       }
