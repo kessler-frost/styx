@@ -63,14 +63,19 @@
 
 ---
 
-## Phase 5: Security
+## Phase 5: Security ✓
 **Goal**: Secure communication and secrets
 
-- [ ] Consul Connect for mTLS (service mesh)
-- [ ] Vault integration for secrets
-- [ ] TLS for Nomad/Consul APIs
+- [x] TLS for Nomad/Consul APIs (always enabled)
+- [x] Gossip encryption for Consul cluster
+- [x] Vault integration for secrets (server mode only)
+- [x] Certificate generation using Consul CLI
+- [~] Consul Connect for mTLS (NOT SUPPORTED on macOS - sidecars require Linux CNI)
 
-**Deliverable**: All inter-service traffic encrypted
+**Note**: Consul Connect sidecars don't work on macOS due to Linux CNI bridge networking requirement.
+Tailscale provides encrypted transport between nodes. Consul intentions can be used for authorization policy.
+
+**Deliverable**: TLS for APIs, Vault for secrets, Tailscale for transport encryption (COMPLETE)
 
 ---
 
@@ -178,3 +183,16 @@
 - Services registered in Consul with Tailscale hostname, accessible from any node on the tailnet
 - Health checks work now because they connect via host port proxy
 - Tailscale MagicDNS resolves machine names; Consul DNS resolves service names
+
+### Phase 5 Discoveries
+
+- **Consul Connect sidecars do NOT work on macOS** - they require Linux CNI bridge networking (GitHub Issue #12917)
+- Alternative security model: Tailscale already encrypts all inter-node traffic (WireGuard), so we add TLS for APIs + Vault
+- TLS certificates generated using Consul's built-in CA: `consul tls ca create`, `consul tls cert create`
+- Gossip encryption key generated with `consul keygen` and stored in secrets directory
+- For client nodes joining: CA and gossip key must be manually copied from server (secure distribution)
+- Vault deployed as launchd service (not Nomad job) to avoid chicken-and-egg problem
+- Vault uses Consul storage backend for HA
+- Vault auto-initialized with 1 unseal key for simplicity (production would use 5 shares, 3 threshold)
+- Nomad-Vault integration creates policy and token role for job secrets access
+- Consul intentions can be used for service authorization (without sidecar enforcement)

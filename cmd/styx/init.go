@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	cryptotls "crypto/tls"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,6 +14,8 @@ import (
 	"github.com/kessler-frost/styx/internal/config"
 	"github.com/kessler-frost/styx/internal/launchd"
 	"github.com/kessler-frost/styx/internal/network"
+	"github.com/kessler-frost/styx/internal/tls"
+	"github.com/kessler-frost/styx/internal/vault"
 	"github.com/spf13/cobra"
 )
 
@@ -39,8 +42,13 @@ func init() {
 func runInit(cmd *cobra.Command, args []string) error {
 	// Check if already running and healthy
 	if launchd.IsLoaded("com.styx.nomad") {
-		client := &http.Client{Timeout: 2 * time.Second}
-		resp, err := client.Get("http://127.0.0.1:4646/v1/agent/health")
+		client := &http.Client{
+			Timeout: 2 * time.Second,
+			Transport: &http.Transport{
+				TLSClientConfig: &cryptotls.Config{InsecureSkipVerify: true},
+			},
+		}
+		resp, err := client.Get("https://127.0.0.1:4646/v1/agent/health")
 		if err == nil && resp.StatusCode == http.StatusOK {
 			resp.Body.Close()
 			fmt.Println("Styx is already running and healthy")
@@ -95,6 +103,9 @@ func runInit(cmd *cobra.Command, args []string) error {
 		logDir,
 		pluginDir,
 		consulDataDir,
+		certsDir,
+		secretsDir,
+		vaultDataDir,
 	}
 
 	for _, dir := range dirs {
@@ -125,6 +136,97 @@ func runInit(cmd *cobra.Command, args []string) error {
 		fmt.Printf("Warning: plugin not found at %s, assuming already installed\n", pluginSrc)
 	}
 
+	// Generate TLS certificates
+	fmt.Println("Setting up TLS certificates...")
+	datacenter := "dc1"
+	region := "global"
+
+	// Generate CAs and certs (for server mode, or check for existing)
+	var consulCertPaths *tls.CertPaths
+	var nomadCertPaths *tls.NomadCertPaths
+	var gossipKey string
+
+	if serverMode {
+		// Server: generate Consul CA, server cert, and gossip key
+		fmt.Println("Generating Consul Certificate Authority...")
+		if err := tls.GenerateCA(certsDir); err != nil {
+			return fmt.Errorf("failed to generate Consul CA: %w", err)
+		}
+
+		fmt.Println("Generating Consul server certificates...")
+		consulCertPaths, err = tls.GenerateServerCert(certsDir, datacenter)
+		if err != nil {
+			return fmt.Errorf("failed to generate Consul server cert: %w", err)
+		}
+
+		fmt.Println("Generating gossip encryption key...")
+		gossipKey, err = tls.GenerateGossipKey()
+		if err != nil {
+			return fmt.Errorf("failed to generate gossip key: %w", err)
+		}
+		if err := tls.SaveGossipKey(secretsDir, gossipKey); err != nil {
+			return fmt.Errorf("failed to save gossip key: %w", err)
+		}
+
+		// Generate Nomad CA and server cert (separate from Consul)
+		fmt.Println("Generating Nomad Certificate Authority...")
+		if err := tls.GenerateNomadCA(certsDir); err != nil {
+			return fmt.Errorf("failed to generate Nomad CA: %w", err)
+		}
+
+		fmt.Println("Generating Nomad server certificates...")
+		nomadCertPaths, err = tls.GenerateNomadServerCert(certsDir, region)
+		if err != nil {
+			return fmt.Errorf("failed to generate Nomad server cert: %w", err)
+		}
+	} else {
+		// Standalone client: generate client certs (reuse CAs if exist)
+		consulCertPaths, err = tls.GetExistingCerts(certsDir, datacenter, false)
+		if err != nil {
+			// No existing certs, generate new ones for standalone mode
+			fmt.Println("Generating Consul Certificate Authority...")
+			if err := tls.GenerateCA(certsDir); err != nil {
+				return fmt.Errorf("failed to generate Consul CA: %w", err)
+			}
+
+			fmt.Println("Generating Consul client certificates...")
+			consulCertPaths, err = tls.GenerateClientCert(certsDir, datacenter)
+			if err != nil {
+				return fmt.Errorf("failed to generate Consul client cert: %w", err)
+			}
+
+			fmt.Println("Generating gossip encryption key...")
+			gossipKey, err = tls.GenerateGossipKey()
+			if err != nil {
+				return fmt.Errorf("failed to generate gossip key: %w", err)
+			}
+			if err := tls.SaveGossipKey(secretsDir, gossipKey); err != nil {
+				return fmt.Errorf("failed to save gossip key: %w", err)
+			}
+		} else {
+			gossipKey, err = tls.LoadGossipKey(secretsDir)
+			if err != nil {
+				return fmt.Errorf("failed to load gossip key: %w", err)
+			}
+		}
+
+		// Generate Nomad client certs
+		nomadCertPaths, err = tls.GetExistingNomadCerts(certsDir, region, false)
+		if err != nil {
+			fmt.Println("Generating Nomad Certificate Authority...")
+			if err := tls.GenerateNomadCA(certsDir); err != nil {
+				return fmt.Errorf("failed to generate Nomad CA: %w", err)
+			}
+
+			fmt.Println("Generating Nomad client certificates...")
+			nomadCertPaths, err = tls.GenerateNomadClientCert(certsDir, region)
+			if err != nil {
+				return fmt.Errorf("failed to generate Nomad client cert: %w", err)
+			}
+		}
+	}
+	fmt.Printf("TLS certificates ready in: %s\n", certsDir)
+
 	// Generate config
 	var configContent string
 	if serverMode {
@@ -134,6 +236,9 @@ func runInit(cmd *cobra.Command, args []string) error {
 			AdvertiseIP:     ip,
 			BootstrapExpect: 1,
 			PluginDir:       pluginDir,
+			CAFile:          nomadCertPaths.CAFile,
+			CertFile:        nomadCertPaths.CertFile,
+			KeyFile:         nomadCertPaths.KeyFile,
 		}
 		configContent, err = config.GenerateServerConfig(cfg)
 	} else {
@@ -143,6 +248,9 @@ func runInit(cmd *cobra.Command, args []string) error {
 			AdvertiseIP: ip,
 			Servers:     []string{ip}, // Point to self for standalone
 			PluginDir:   pluginDir,
+			CAFile:      nomadCertPaths.CAFile,
+			CertFile:    nomadCertPaths.CertFile,
+			KeyFile:     nomadCertPaths.KeyFile,
 		}
 		configContent, err = config.GenerateClientConfig(cfg)
 	}
@@ -164,6 +272,10 @@ func runInit(cmd *cobra.Command, args []string) error {
 			DataDir:         consulDataDir,
 			AdvertiseIP:     ip,
 			BootstrapExpect: 1,
+			CAFile:          consulCertPaths.CAFile,
+			CertFile:        consulCertPaths.CertFile,
+			KeyFile:         consulCertPaths.KeyFile,
+			GossipKey:       gossipKey,
 		}
 		consulConfigContent, err = config.GenerateConsulServerConfig(consulCfg)
 	} else {
@@ -172,6 +284,10 @@ func runInit(cmd *cobra.Command, args []string) error {
 			DataDir:     consulDataDir,
 			AdvertiseIP: ip,
 			Servers:     []string{ip}, // Point to self for standalone
+			CAFile:      consulCertPaths.CAFile,
+			CertFile:    consulCertPaths.CertFile,
+			KeyFile:     consulCertPaths.KeyFile,
+			GossipKey:   gossipKey,
 		}
 		consulConfigContent, err = config.GenerateConsulClientConfig(consulCfg)
 	}
@@ -185,11 +301,92 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to write consul config: %w", err)
 	}
 
-	// Create wrapper script that starts both Consul and Nomad
+	// Generate Vault config (server mode only)
+	var vaultPath string
+	var vaultConfigPath string
+	if serverMode {
+		vaultPath, err = exec.LookPath("vault")
+		if err != nil {
+			return fmt.Errorf("vault not found in PATH. Please install vault first: brew install vault")
+		}
+		fmt.Printf("Found vault at: %s\n", vaultPath)
+
+		fmt.Println("Generating Vault configuration...")
+		vaultCfg := config.VaultConfig{
+			AdvertiseIP: ip,
+		}
+		vaultConfigContent, err := config.GenerateVaultConfig(vaultCfg)
+		if err != nil {
+			return fmt.Errorf("failed to generate vault config: %w", err)
+		}
+
+		vaultConfigPath = filepath.Join(configDir, "vault.hcl")
+		fmt.Printf("Writing Vault config to: %s\n", vaultConfigPath)
+		if err := config.WriteConfig(vaultConfigPath, vaultConfigContent); err != nil {
+			return fmt.Errorf("failed to write vault config: %w", err)
+		}
+	}
+
+	// Create wrapper script that starts Consul, Vault (if server), and Nomad
 	wrapperPath := filepath.Join(configDir, "styx-agent.sh")
 	consulConfigFile := filepath.Join(configDir, "consul.hcl")
-	wrapperContent := fmt.Sprintf(`#!/bin/bash
-# Styx agent wrapper - starts Consul and Nomad together
+
+	var wrapperContent string
+	if serverMode {
+		// Server mode: includes Vault
+		wrapperContent = fmt.Sprintf(`#!/bin/bash
+# Styx agent wrapper - starts Consul, Vault, and Nomad
+set -e
+
+cleanup() {
+    echo "Stopping services..."
+    kill $NOMAD_PID 2>/dev/null || true
+    kill $VAULT_PID 2>/dev/null || true
+    kill $CONSUL_PID 2>/dev/null || true
+    exit 0
+}
+
+trap cleanup SIGTERM SIGINT
+
+# Start Consul
+"%s" agent -config-file="%s" &
+CONSUL_PID=$!
+
+# Wait for Consul to be healthy
+echo "Waiting for Consul..."
+for i in {1..30}; do
+    if curl -s http://127.0.0.1:8500/v1/status/leader | grep -q .; then
+        echo "Consul is ready"
+        break
+    fi
+    sleep 1
+done
+
+# Start Vault
+"%s" server -config="%s" &
+VAULT_PID=$!
+
+# Wait for Vault to be ready
+echo "Waiting for Vault..."
+for i in {1..30}; do
+    if curl -s http://127.0.0.1:8200/v1/sys/health 2>/dev/null | grep -q .; then
+        echo "Vault is ready"
+        break
+    fi
+    sleep 1
+done
+
+# Start Nomad (uses workload identity for Vault, no token needed)
+"%s" agent -config="%s/nomad.hcl" &
+NOMAD_PID=$!
+
+# Wait for either to exit
+wait
+`, consulPath, consulConfigFile, vaultPath, vaultConfigPath, nomadPath, configDir)
+	} else {
+		// Client mode: no Vault
+		wrapperContent = fmt.Sprintf(`#!/bin/bash
+# Styx agent wrapper - starts Consul and Nomad
 set -e
 
 cleanup() {
@@ -222,6 +419,7 @@ NOMAD_PID=$!
 # Wait for either to exit
 wait
 `, consulPath, consulConfigFile, nomadPath, configDir)
+	}
 
 	fmt.Printf("Writing wrapper script to: %s\n", wrapperPath)
 	if err := os.WriteFile(wrapperPath, []byte(wrapperContent), 0755); err != nil {
@@ -278,6 +476,45 @@ wait
 		return fmt.Errorf("consul failed to start: %w\nCheck logs at %s", err, filepath.Join(logDir, "styx.log"))
 	}
 
+	// Initialize and unseal Vault (server mode only)
+	if serverMode {
+		fmt.Println("Waiting for Vault to become ready...")
+		if err := waitForVaultHealth(30 * time.Second); err != nil {
+			return fmt.Errorf("vault failed to start: %w\nCheck logs at %s", err, filepath.Join(logDir, "styx.log"))
+		}
+
+		// Check if Vault needs initialization
+		initialized, err := vault.IsInitialized()
+		if err != nil {
+			return fmt.Errorf("failed to check vault status: %w", err)
+		}
+
+		if !initialized {
+			fmt.Println("Initializing Vault...")
+			_, err = vault.Initialize(secretsDir)
+			if err != nil {
+				return fmt.Errorf("failed to initialize vault: %w", err)
+			}
+		}
+
+		// Unseal if sealed
+		sealed, _ := vault.IsSealed()
+		if sealed {
+			fmt.Println("Unsealing Vault...")
+			if err := vault.Unseal(secretsDir); err != nil {
+				return fmt.Errorf("failed to unseal vault: %w", err)
+			}
+		}
+
+		// Setup Nomad integration with workload identities
+		fmt.Println("Setting up Vault-Nomad integration...")
+		nomadCAPath := filepath.Join(certsDir, "nomad-agent-ca.pem")
+		if err := vault.SetupNomadIntegration(secretsDir, nomadCAPath); err != nil {
+			fmt.Printf("Warning: failed to setup Vault-Nomad integration: %v\n", err)
+			fmt.Println("You can set this up later with 'vault policy write' and 'vault token create'")
+		}
+	}
+
 	// Wait for Nomad to become healthy
 	// Nomad can take 40+ seconds to start due to plugin loading and client registration
 	fmt.Println("Waiting for Nomad to become healthy...")
@@ -294,17 +531,31 @@ wait
 	fmt.Println("  styx status           # Show Styx status")
 	fmt.Println("  consul members        # List Consul members")
 	fmt.Println("  nomad node status     # List Nomad nodes")
-	fmt.Println("\nConsul UI available at: http://127.0.0.1:8500")
+	if serverMode {
+		fmt.Println("  vault status          # Show Vault status")
+	}
+	fmt.Println("\nConsul UI: http://127.0.0.1:8500 (HTTPS: https://127.0.0.1:8501)")
+	if serverMode {
+		fmt.Println("Vault UI:  http://127.0.0.1:8200/ui")
+	}
+	fmt.Println("TLS enabled - APIs secured with mTLS")
 
 	return nil
 }
 
 func waitForNomadHealth(timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
-	client := &http.Client{Timeout: 2 * time.Second}
+	// Use HTTPS since we have TLS enabled on Nomad HTTP API
+	// Skip certificate verification for localhost health checks
+	client := &http.Client{
+		Timeout: 2 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &cryptotls.Config{InsecureSkipVerify: true},
+		},
+	}
 
 	for time.Now().Before(deadline) {
-		resp, err := client.Get("http://127.0.0.1:4646/v1/agent/health")
+		resp, err := client.Get("https://127.0.0.1:4646/v1/agent/health")
 		if err == nil {
 			resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
@@ -335,6 +586,28 @@ func waitForConsulHealth(timeout time.Duration) error {
 	}
 	fmt.Println()
 	return fmt.Errorf("timeout waiting for consul health")
+}
+
+func waitForVaultHealth(timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	client := &http.Client{Timeout: 2 * time.Second}
+
+	for time.Now().Before(deadline) {
+		resp, err := client.Get("http://127.0.0.1:8200/v1/sys/health")
+		if err == nil {
+			resp.Body.Close()
+			// Vault returns 200 (initialized, unsealed), 429 (unsealed, standby),
+			// 472 (DR secondary), 473 (performance standby), 501 (not initialized), or 503 (sealed)
+			// Any of these means Vault is responding
+			if resp.StatusCode == 200 || resp.StatusCode == 429 || resp.StatusCode == 501 || resp.StatusCode == 503 {
+				return nil
+			}
+		}
+		time.Sleep(1 * time.Second)
+		fmt.Print(".")
+	}
+	fmt.Println()
+	return fmt.Errorf("timeout waiting for vault health")
 }
 
 func setupConsulDNS() error {

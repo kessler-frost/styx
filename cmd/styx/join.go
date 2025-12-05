@@ -12,6 +12,7 @@ import (
 	"github.com/kessler-frost/styx/internal/config"
 	"github.com/kessler-frost/styx/internal/launchd"
 	"github.com/kessler-frost/styx/internal/network"
+	"github.com/kessler-frost/styx/internal/tls"
 	"github.com/spf13/cobra"
 )
 
@@ -116,6 +117,8 @@ func runJoin(cmd *cobra.Command, args []string) error {
 		logDir,
 		pluginDir,
 		consulDataDir,
+		certsDir,
+		secretsDir,
 	}
 
 	for _, dir := range dirs {
@@ -145,6 +148,52 @@ func runJoin(cmd *cobra.Command, args []string) error {
 		fmt.Printf("Warning: plugin not found at %s, assuming already installed\n", pluginSrc)
 	}
 
+	// Setup TLS certificates
+	fmt.Println("Setting up TLS certificates...")
+	datacenter := "dc1"
+
+	// Check if CA exists (must be copied from server)
+	caFile := filepath.Join(certsDir, "consul-agent-ca.pem")
+	if _, err := os.Stat(caFile); os.IsNotExist(err) {
+		fmt.Println("\n⚠️  TLS certificates required!")
+		fmt.Println("Copy the following files from the server to this machine:")
+		fmt.Printf("  Server: ~/Library/Application Support/styx/certs/consul-agent-ca.pem\n")
+		fmt.Printf("      To: %s\n", caFile)
+		fmt.Printf("  Server: ~/Library/Application Support/styx/secrets/gossip.key\n")
+		fmt.Printf("      To: %s/gossip.key\n", secretsDir)
+		fmt.Println("\nThen run 'styx join' again.")
+		return fmt.Errorf("CA certificate not found - copy from server first")
+	}
+
+	// Check if gossip key exists (must be copied from server)
+	gossipKeyFile := filepath.Join(secretsDir, "gossip.key")
+	if _, err := os.Stat(gossipKeyFile); os.IsNotExist(err) {
+		fmt.Println("\n⚠️  Gossip key required!")
+		fmt.Println("Copy the gossip key from the server:")
+		fmt.Printf("  Server: ~/Library/Application Support/styx/secrets/gossip.key\n")
+		fmt.Printf("      To: %s\n", gossipKeyFile)
+		fmt.Println("\nThen run 'styx join' again.")
+		return fmt.Errorf("gossip key not found - copy from server first")
+	}
+
+	// Load gossip key
+	gossipKey, err := tls.LoadGossipKey(secretsDir)
+	if err != nil {
+		return fmt.Errorf("failed to load gossip key: %w", err)
+	}
+
+	// Generate client certificate
+	var certPaths *tls.CertPaths
+	certPaths, err = tls.GetExistingCerts(certsDir, datacenter, false)
+	if err != nil {
+		fmt.Println("Generating client certificates...")
+		certPaths, err = tls.GenerateClientCert(certsDir, datacenter)
+		if err != nil {
+			return fmt.Errorf("failed to generate client cert: %w", err)
+		}
+	}
+	fmt.Printf("TLS certificates ready in: %s\n", certsDir)
+
 	// Generate client config
 	fmt.Println("Generating client configuration...")
 	cfg := config.ClientConfig{
@@ -152,6 +201,9 @@ func runJoin(cmd *cobra.Command, args []string) error {
 		AdvertiseIP: ip,
 		Servers:     []string{serverIP},
 		PluginDir:   pluginDir,
+		CAFile:      certPaths.CAFile,
+		CertFile:    certPaths.CertFile,
+		KeyFile:     certPaths.KeyFile,
 	}
 	configContent, err := config.GenerateClientConfig(cfg)
 	if err != nil {
@@ -170,6 +222,10 @@ func runJoin(cmd *cobra.Command, args []string) error {
 		DataDir:     consulDataDir,
 		AdvertiseIP: ip,
 		Servers:     []string{serverIP},
+		CAFile:      certPaths.CAFile,
+		CertFile:    certPaths.CertFile,
+		KeyFile:     certPaths.KeyFile,
+		GossipKey:   gossipKey,
 	}
 	consulConfigContent, err := config.GenerateConsulClientConfig(consulCfg)
 	if err != nil {
@@ -291,7 +347,8 @@ wait
 	fmt.Println("  styx status           # Show Styx status")
 	fmt.Println("  consul members        # List Consul members")
 	fmt.Println("  nomad node status     # List Nomad nodes")
-	fmt.Println("\nConsul UI available at: http://127.0.0.1:8500")
+	fmt.Println("\nConsul UI: http://127.0.0.1:8500 (HTTPS: https://127.0.0.1:8501)")
+	fmt.Println("TLS enabled - APIs secured with mTLS")
 
 	return nil
 }

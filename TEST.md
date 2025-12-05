@@ -267,19 +267,139 @@ task "myapp" {
 
 ---
 
-## Phase 5: Security
+## Phase 5: Security ✓
+
+### Prerequisites
+- Phase 4 tests passing
+- Vault installed (`mise install vault` or `brew install vault`)
 
 ### Test Cases
 
-#### 5.1 mTLS Between Services
+#### 5.1 TLS for Consul API ✓
 ```bash
-# TBD - Consul Connect integration
+# Reinitialize with TLS (now always enabled)
+styx stop && styx init --server
+
+# HTTP still works (for backward compat)
+curl http://127.0.0.1:8500/v1/status/leader
+# Expected: Returns cluster leader
+
+# HTTPS works
+curl -k https://127.0.0.1:8501/v1/status/leader
+# Expected: Returns cluster leader
+
+# Verify TLS is configured
+consul info | grep encrypt
+# Expected: Shows "encrypt = true"
 ```
 
-#### 5.2 Vault Secrets
+#### 5.2 Gossip Encryption ✓
 ```bash
-# TBD - Vault integration
+# Check gossip encryption is enabled
+consul info | grep encrypt
+# Expected: Shows "encrypt = true"
+
+# Key file exists
+ls ~/Library/Application\ Support/styx/secrets/gossip.key
+# Expected: File exists
 ```
+
+#### 5.3 Certificate Generation ✓
+```bash
+# Check certificates exist
+ls ~/Library/Application\ Support/styx/certs/
+# Expected: consul-agent-ca.pem, dc1-server-consul-*.pem, dc1-server-consul-*-key.pem
+```
+
+#### 5.4 Vault Running (Server Mode) ✓
+```bash
+vault status
+# Expected: Shows initialized and unsealed
+# "Sealed: false"
+
+# Root token saved
+cat ~/Library/Application\ Support/styx/secrets/vault-init.json
+# Expected: Contains unseal_keys_b64 and root_token
+```
+
+#### 5.5 Vault KV Store ✓
+```bash
+# Set VAULT_ADDR
+export VAULT_ADDR=http://127.0.0.1:8200
+
+# Login with root token (for testing)
+export VAULT_TOKEN=$(cat ~/Library/Application\ Support/styx/secrets/vault-init.json | jq -r '.root_token')
+
+# Store a secret
+vault kv put secret/nginx api_key=test123 db_password=secret456
+# Expected: Success
+
+# Retrieve secret
+vault kv get secret/nginx
+# Expected: Shows api_key and db_password
+```
+
+#### 5.6 Nomad-Vault Integration ✓
+```bash
+# Verify Nomad token exists
+cat ~/Library/Application\ Support/styx/secrets/nomad-vault-token
+# Expected: Shows Vault token for Nomad
+
+# Policy exists
+vault policy read nomad-server
+# Expected: Shows policy allowing secret access
+```
+
+#### 5.7 Job with Vault Secrets ✓
+```bash
+# First create the secret
+export VAULT_ADDR=http://127.0.0.1:8200
+export VAULT_TOKEN=$(cat ~/Library/Application\ Support/styx/secrets/vault-init.json | jq -r '.root_token')
+vault kv put secret/nginx api_key=test123 db_password=secret456
+
+# Run job that uses Vault secrets
+nomad job run example/nginx-vault.nomad
+# Expected: Job deploys successfully
+
+# Verify secrets template rendered
+nomad alloc logs <alloc-id>
+# Expected: No template rendering errors
+```
+
+#### 5.8 Client Join with TLS
+```bash
+# On server (Mac A)
+styx stop && styx init --server
+
+# Copy CA and gossip key to client (Mac B)
+scp ~/Library/Application\ Support/styx/certs/consul-agent-ca.pem macb:~/Library/Application\ Support/styx/certs/
+scp ~/Library/Application\ Support/styx/secrets/gossip.key macb:~/Library/Application\ Support/styx/secrets/
+
+# On client (Mac B)
+styx join <server-tailscale-ip>
+# Expected: Joins cluster with TLS
+
+# Verify cluster membership
+consul members
+# Expected: Shows both nodes
+```
+
+### Phase 5 Notes
+
+**Consul Connect Limitation**:
+- Consul Connect sidecars do NOT work on macOS (requires Linux CNI bridge networking)
+- See: https://github.com/hashicorp/nomad/issues/12917
+- Alternative: Tailscale provides WireGuard encryption for all inter-node traffic
+
+**Security Model**:
+- TLS for Nomad/Consul APIs - protects control plane
+- Gossip encryption for Consul - protects cluster communication
+- Vault for secrets - protects sensitive data in jobs
+- Tailscale for transport - encrypts all inter-node traffic
+
+**Certificate Distribution**:
+- CA and gossip key must be manually copied from server to clients
+- Client certs are generated locally using the shared CA
 
 ---
 

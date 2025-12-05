@@ -28,9 +28,12 @@ styx/
 │   └── version.go      # styx version
 ├── driver/             # Nomad task driver plugin
 ├── internal/
-│   ├── config/         # Nomad HCL config generation
+│   ├── config/         # Nomad/Consul/Vault HCL config generation
 │   ├── launchd/        # macOS launchd plist management
-│   └── network/        # IP detection utilities
+│   ├── network/        # IP detection and Tailscale utilities
+│   ├── proxy/          # TCP proxy for container port forwarding
+│   ├── tls/            # TLS certificate generation using Consul
+│   └── vault/          # Vault initialization and setup helpers
 ├── example/            # Sample Nomad job specs
 ├── plugins/            # Built plugin binary
 └── bin/                # Built CLI binary
@@ -53,6 +56,25 @@ styx/
 - Minimize if/else and try/except - prefer single code paths
 - Follow Go idioms (error returns, early returns)
 - Keep functions small and focused
+
+### No Backwards Compatibility
+
+- Don't worry about backwards compatibility for existing installations
+- Features should always be enabled (no optional flags for core functionality)
+- TLS, Vault, and security features are always on
+- Breaking changes are acceptable - this is a development project
+
+### Prefer Modern Approaches
+
+When implementing features with HashiCorp tools (Nomad, Consul, Vault), always use the latest/modern approaches:
+
+- **Vault + Nomad**: Use workload identities (JWT auth) instead of legacy token-based auth (Nomad 1.7+)
+- **TLS Certificates**: Generate separate certificates for each service (Nomad certs, Consul certs) - don't reuse
+- **Consul Connect**: Note that sidecars don't work on macOS - use Tailscale for transport encryption
+- **Authentication**: Prefer short-lived tokens over long-lived static tokens
+- **Service Discovery**: Use `address_mode = "driver"` for container services to register container IPs
+
+When encountering a choice between legacy and modern approaches, always choose modern unless there's a specific macOS/Apple Silicon limitation.
 
 ### When Starting a Phase
 
@@ -84,6 +106,8 @@ The user uses **mise** to install and manage package versions. When a tool needs
 - Container runtime: `/usr/local/bin/container` (Apple's CLI)
 - Nomad: `mise install nomad` or `brew install nomad`
 - Consul: `mise install consul` or `brew install consul`
+- Vault: `mise install vault` or `brew install vault`
+- Tailscale: https://tailscale.com/download (for cross-node networking)
 
 ### Testing
 
@@ -91,7 +115,7 @@ The user uses **mise** to install and manage package versions. When a tool needs
 - **Quick smoke test**: See the "Quick Smoke Test" section in TEST.md
 - Test task driver with `make dev` (builds plugin and starts Nomad in dev mode)
 - Use `container` CLI directly to verify behavior before wrapping
-- Example jobs in `example/` directory: alpine.nomad, nginx.nomad, ubuntu.nomad
+- Example jobs in `example/` directory: alpine.nomad, nginx.nomad, ubuntu.nomad, nginx-vault.nomad
 
 ### When Completing a Phase
 

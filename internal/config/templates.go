@@ -31,6 +31,30 @@ plugin "apple-container" {
 consul {
   address = "127.0.0.1:8500"
 }
+
+# TLS Configuration
+tls {
+  http = true
+  rpc  = true
+  ca_file   = "{{.CAFile}}"
+  cert_file = "{{.CertFile}}"
+  key_file  = "{{.KeyFile}}"
+  verify_server_hostname = true
+}
+
+# Vault Integration with Workload Identity
+vault {
+  enabled = true
+  address = "http://127.0.0.1:8200"
+
+  # Workload identity configuration for Nomad 1.7+
+  default_identity {
+    aud  = ["vault.io"]
+    env  = false
+    file = true
+    ttl  = "1h"
+  }
+}
 `
 
 // ClientConfigTemplate is the HCL template for a Nomad client node.
@@ -59,5 +83,29 @@ plugin "apple-container" {
 
 consul {
   address = "127.0.0.1:8500"
+}
+
+# TLS Configuration
+tls {
+  http = true
+  rpc  = true
+  ca_file   = "{{.CAFile}}"
+  cert_file = "{{.CertFile}}"
+  key_file  = "{{.KeyFile}}"
+  verify_server_hostname = true
+}
+
+# Vault Integration with Workload Identity
+vault {
+  enabled = true
+  address = "http://127.0.0.1:8200"
+
+  # Workload identity configuration for Nomad 1.7+
+  default_identity {
+    aud  = ["vault.io"]
+    env  = false
+    file = true
+    ttl  = "1h"
+  }
 }
 `

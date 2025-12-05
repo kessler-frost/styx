@@ -18,10 +18,30 @@ ui_config {
 ports {
   dns = 8600
   http = 8500
+  https = 8501
 }
 
 connect {
   enabled = true
+}
+
+# TLS Configuration
+tls {
+  defaults {
+    ca_file   = "{{.CAFile}}"
+    cert_file = "{{.CertFile}}"
+    key_file  = "{{.KeyFile}}"
+    verify_incoming = true
+    verify_outgoing = true
+  }
+}
+
+# Gossip Encryption
+encrypt = "{{.GossipKey}}"
+
+# Auto-encrypt for client certificates
+auto_encrypt {
+  allow_tls = true
 }
 `
 
@@ -39,9 +59,24 @@ retry_join = [{{range $i, $s := .Servers}}{{if $i}}, {{end}}"{{$s}}"{{end}}]
 ports {
   dns = 8600
   http = 8500
+  https = 8501
 }
 
 connect {
   enabled = true
 }
+
+# TLS Configuration
+tls {
+  defaults {
+    ca_file   = "{{.CAFile}}"
+    cert_file = "{{.CertFile}}"
+    key_file  = "{{.KeyFile}}"
+    verify_incoming = true
+    verify_outgoing = true
+  }
+}
+
+# Gossip Encryption
+encrypt = "{{.GossipKey}}"
 `
