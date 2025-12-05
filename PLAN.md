@@ -12,11 +12,11 @@
 ## Phase 1: Foundation
 **Goal**: Run Apple Containers via Nomad locally
 
-- [ ] Create Nomad task driver skeleton
-- [ ] Implement container CLI wrapper
-- [ ] Basic lifecycle: start, stop, destroy
-- [ ] Parse container inspect output
-- [ ] Test with `nomad agent -dev`
+- [x] Create Nomad task driver skeleton
+- [x] Implement container CLI wrapper
+- [x] Basic lifecycle: start, stop, destroy
+- [x] Parse container inspect output
+- [~] Test with `nomad agent -dev`
 
 **Deliverable**: `nomad job run` launches an Apple Container
 
