@@ -61,24 +61,20 @@ func runInit(cmd *cobra.Command, args []string) error {
 	dirs := []string{
 		dataDir,
 		configDir,
-		"/var/log/nomad",
+		logDir,
 		pluginDir,
 	}
 
 	for _, dir := range dirs {
 		fmt.Printf("Creating directory: %s\n", dir)
 		if err := os.MkdirAll(dir, 0755); err != nil {
-			return fmt.Errorf("failed to create directory %s: %w (try with sudo)", dir, err)
+			return fmt.Errorf("failed to create directory %s: %w", dir, err)
 		}
 	}
 
 	// Copy plugin to plugin directory
 	pluginSrc := filepath.Join(filepath.Dir(os.Args[0]), "..", "plugins", "apple-container")
 	// Also check common build locations
-	if _, err := os.Stat(pluginSrc); os.IsNotExist(err) {
-		pluginSrc = "/usr/local/lib/styx/plugins/apple-container"
-	}
-	// Check in current working directory
 	if _, err := os.Stat(pluginSrc); os.IsNotExist(err) {
 		cwd, _ := os.Getwd()
 		pluginSrc = filepath.Join(cwd, "plugins", "apple-container")
@@ -128,13 +124,26 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to write config: %w", err)
 	}
 
-	// Generate and write launchd plist
-	plistPath := "/Library/LaunchDaemons/com.styx.nomad.plist"
+	// Generate and write launchd plist (user agent)
+	home, _ := os.UserHomeDir()
+	plistPath := filepath.Join(home, "Library", "LaunchAgents", "com.styx.nomad.plist")
 	fmt.Printf("Creating launchd plist at: %s\n", plistPath)
 
-	plistCfg := launchd.DefaultNomadPlistConfig(configDir)
+	// Ensure LaunchAgents directory exists
+	if err := os.MkdirAll(filepath.Dir(plistPath), 0755); err != nil {
+		return fmt.Errorf("failed to create LaunchAgents directory: %w", err)
+	}
+
+	plistCfg := launchd.PlistConfig{
+		Label:      "com.styx.nomad",
+		Program:    nomadPath,
+		Args:       []string{"agent", "-config=" + configDir},
+		LogPath:    filepath.Join(logDir, "nomad.log"),
+		ErrLogPath: filepath.Join(logDir, "nomad-error.log"),
+		WorkingDir: configDir,
+	}
 	if err := launchd.WritePlist(plistPath, plistCfg); err != nil {
-		return fmt.Errorf("failed to write plist: %w (try with sudo)", err)
+		return fmt.Errorf("failed to write plist: %w", err)
 	}
 
 	// Unload if already loaded (ignore errors)
@@ -153,7 +162,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	// Wait for Nomad to become healthy
 	fmt.Println("Waiting for Nomad to become healthy...")
 	if err := waitForNomadHealth(30 * time.Second); err != nil {
-		return fmt.Errorf("nomad failed to start: %w\nCheck logs at /var/log/nomad/nomad.log", err)
+		return fmt.Errorf("nomad failed to start: %w\nCheck logs at %s", err, filepath.Join(logDir, "nomad.log"))
 	}
 
 	fmt.Println("\nStyx initialized successfully!")

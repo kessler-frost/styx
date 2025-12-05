@@ -67,7 +67,7 @@ func GeneratePlist(cfg PlistConfig) ([]byte, error) {
 }
 
 // WritePlist writes a launchd plist file to the specified path.
-// The path should typically be /Library/LaunchDaemons/com.styx.nomad.plist
+// For user agents: ~/Library/LaunchAgents/com.styx.nomad.plist
 func WritePlist(path string, cfg PlistConfig) error {
 	content, err := GeneratePlist(cfg)
 	if err != nil {
@@ -84,16 +84,4 @@ func WritePlist(path string, cfg PlistConfig) error {
 	}
 
 	return nil
-}
-
-// DefaultNomadPlistConfig returns a PlistConfig with sensible defaults for Nomad.
-func DefaultNomadPlistConfig(configDir string) PlistConfig {
-	return PlistConfig{
-		Label:      "com.styx.nomad",
-		Program:    "/usr/local/bin/nomad",
-		Args:       []string{"agent", "-config=" + configDir},
-		LogPath:    "/var/log/nomad/nomad.log",
-		ErrLogPath: "/var/log/nomad/nomad-error.log",
-		WorkingDir: configDir,
-	}
 }

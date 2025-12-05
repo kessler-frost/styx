@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 )
@@ -15,6 +16,7 @@ var (
 	dataDir   string
 	configDir string
 	pluginDir string
+	logDir    string
 )
 
 var rootCmd = &cobra.Command{
@@ -28,9 +30,13 @@ to join an existing cluster as a client node.`,
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVar(&dataDir, "data-dir", "/var/lib/nomad", "Nomad data directory")
-	rootCmd.PersistentFlags().StringVar(&configDir, "config-dir", "/etc/nomad.d", "Nomad config directory")
-	rootCmd.PersistentFlags().StringVar(&pluginDir, "plugin-dir", "/usr/local/lib/styx/plugins", "Plugin directory")
+	home, _ := os.UserHomeDir()
+	styxBase := filepath.Join(home, "Library", "Application Support", "styx")
+
+	rootCmd.PersistentFlags().StringVar(&dataDir, "data-dir", filepath.Join(styxBase, "nomad"), "Nomad data directory")
+	rootCmd.PersistentFlags().StringVar(&configDir, "config-dir", filepath.Join(styxBase, "config"), "Nomad config directory")
+	rootCmd.PersistentFlags().StringVar(&pluginDir, "plugin-dir", filepath.Join(styxBase, "plugins"), "Plugin directory")
+	rootCmd.PersistentFlags().StringVar(&logDir, "log-dir", filepath.Join(home, "Library", "Logs", "styx"), "Log directory")
 }
 
 func Execute() error {

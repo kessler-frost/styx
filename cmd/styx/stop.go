@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/kessler-frost/styx/internal/launchd"
@@ -20,7 +22,8 @@ func init() {
 }
 
 func runStop(cmd *cobra.Command, args []string) error {
-	plistPath := "/Library/LaunchDaemons/com.styx.nomad.plist"
+	home, _ := os.UserHomeDir()
+	plistPath := filepath.Join(home, "Library", "LaunchAgents", "com.styx.nomad.plist")
 	label := "com.styx.nomad"
 
 	if !launchd.IsLoaded(label) {
