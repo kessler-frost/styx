@@ -174,6 +174,7 @@ func runJoin(cmd *cobra.Command, args []string) error {
 
 	// Create wrapper script that starts both Consul and Nomad
 	wrapperPath := filepath.Join(configDir, "styx-agent.sh")
+	consulConfigFile := filepath.Join(configDir, "consul.hcl")
 	wrapperContent := fmt.Sprintf(`#!/bin/bash
 # Styx agent wrapper - starts Consul and Nomad together
 set -e
@@ -188,7 +189,7 @@ cleanup() {
 trap cleanup SIGTERM SIGINT
 
 # Start Consul
-%s agent -config=%s &
+"%s" agent -config-file="%s" &
 CONSUL_PID=$!
 
 # Wait for Consul to be healthy
@@ -202,12 +203,12 @@ for i in {1..30}; do
 done
 
 # Start Nomad
-%s agent -config=%s &
+"%s" agent -config="%s/nomad.hcl" &
 NOMAD_PID=$!
 
 # Wait for either to exit
 wait
-`, consulPath, configDir, nomadPath, configDir)
+`, consulPath, consulConfigFile, nomadPath, configDir)
 
 	fmt.Printf("Writing wrapper script to: %s\n", wrapperPath)
 	if err := os.WriteFile(wrapperPath, []byte(wrapperContent), 0755); err != nil {

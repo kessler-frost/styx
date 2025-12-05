@@ -71,11 +71,19 @@ Examples:
 - `phase 1: add task driver skeleton`
 - `phase 2: add styx init command`
 
+### Package Management
+
+The user uses **mise** to install and manage package versions. When a tool needs to be installed:
+1. Check if it can be installed via mise first: `mise install <tool>`
+2. Only fall back to Homebrew if mise doesn't support the tool
+
 ### Key Dependencies
 
 - Nomad task driver SDK: `github.com/hashicorp/nomad/plugins/drivers`
 - CLI framework: `github.com/spf13/cobra`
 - Container runtime: `/usr/local/bin/container` (Apple's CLI)
+- Nomad: `mise install nomad` or `brew install nomad`
+- Consul: `mise install consul` or `brew install consul`
 
 ### Testing
 
