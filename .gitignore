@@ -33,6 +33,7 @@ vendor/
 # Build
 dist/
 bin/
+plugins/
 
 # Downloaded binaries
 .cache/
