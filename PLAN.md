@@ -22,7 +22,7 @@
 
 ---
 
-## Phase 2: Cluster Basics [~]
+## Phase 2: Cluster Basics ✓
 **Goal**: Multiple Macs form a cluster
 
 - [x] Styx launcher CLI skeleton (cobra)
@@ -31,9 +31,7 @@
 - [x] launchd service integration
 - [x] `styx init` / `styx join` commands
 
-**Deliverable**: 2+ Macs running as Nomad cluster
-
-**Status**: CLI implemented, needs testing on actual multi-Mac setup
+**Deliverable**: 2+ Macs running as Nomad cluster (COMPLETE)
 
 ---
 
