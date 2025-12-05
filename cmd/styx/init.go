@@ -36,6 +36,19 @@ func init() {
 }
 
 func runInit(cmd *cobra.Command, args []string) error {
+	// Check if already running and healthy
+	if launchd.IsLoaded("com.styx.nomad") {
+		client := &http.Client{Timeout: 2 * time.Second}
+		resp, err := client.Get("http://127.0.0.1:4646/v1/agent/health")
+		if err == nil && resp.StatusCode == http.StatusOK {
+			resp.Body.Close()
+			fmt.Println("Styx is already running and healthy")
+			fmt.Println("Use 'styx status' to check cluster status")
+			fmt.Println("Use 'styx stop' first if you want to reinitialize")
+			return nil
+		}
+	}
+
 	// Check for nomad binary
 	nomadPath, err := exec.LookPath("nomad")
 	if err != nil {
