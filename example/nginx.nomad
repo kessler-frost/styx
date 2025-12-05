@@ -7,7 +7,7 @@ job "nginx" {
 
     network {
       port "http" {
-        static = 8080
+        static = 10080  # Host port exposed via Tailscale
       }
     }
 
@@ -16,7 +16,7 @@ job "nginx" {
 
       config {
         image = "nginx:latest"
-        ports = ["80:8080"]
+        ports = ["80:10080"]  # containerPort:hostPort
       }
 
       resources {
@@ -27,9 +27,14 @@ job "nginx" {
       service {
         name = "nginx"
         port = "http"
-        address_mode = "driver"
-        # Health check disabled until Phase 4 networking
-        # (Apple Containers don't expose ports to localhost)
+        address_mode = "driver"  # Uses Tailscale hostname from DriverNetwork
+
+        check {
+          type     = "tcp"
+          port     = "http"
+          interval = "10s"
+          timeout  = "2s"
+        }
       }
     }
   }

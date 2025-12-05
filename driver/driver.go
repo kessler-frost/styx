@@ -14,6 +14,8 @@ import (
 	"github.com/hashicorp/nomad/plugins/shared/hclspec"
 	"github.com/hashicorp/nomad/plugins/shared/structs"
 	"github.com/kessler-frost/styx/driver/container"
+	"github.com/kessler-frost/styx/internal/network"
+	"github.com/kessler-frost/styx/internal/proxy"
 )
 
 const (
@@ -193,6 +195,7 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 
 	// Get container network info for service registration
 	var driverNetwork *drivers.DriverNetwork
+	var containerIP string
 	info, err := d.client.Inspect(d.ctx, containerID)
 	if err != nil {
 		d.logger.Warn("failed to inspect container for network info", "error", err)
@@ -202,15 +205,59 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 		if idx := strings.Index(addr, "/"); idx > 0 {
 			addr = addr[:idx]
 		}
-		d.logger.Info("container network info", "ip", addr)
-		driverNetwork = &drivers.DriverNetwork{
-			IP:            addr,
-			AutoAdvertise: true,
+		containerIP = addr
+		d.logger.Info("container network info", "ip", containerIP)
+	}
+
+	// Create handle first so we can attach proxies to it
+	handle := newTaskHandle(d.client, d.logger, containerID, &taskConfig)
+
+	// Get Tailscale info for cross-node networking
+	tailscale := network.GetTailscaleInfo()
+	if tailscale.Running {
+		d.logger.Info("tailscale detected", "hostname", tailscale.DNSName, "ip", tailscale.IP)
+	}
+
+	// Start TCP proxies for port forwarding (Phase 4 networking)
+	// Port format: "containerPort:hostPort" (e.g., "80:10080")
+	if containerIP != "" && len(taskConfig.Ports) > 0 {
+		for _, portMapping := range taskConfig.Ports {
+			parts := strings.Split(portMapping, ":")
+			if len(parts) != 2 {
+				d.logger.Warn("invalid port mapping format, expected containerPort:hostPort", "mapping", portMapping)
+				continue
+			}
+			containerPort := parts[0]
+			hostPort := parts[1]
+
+			listenAddr := fmt.Sprintf("0.0.0.0:%s", hostPort)
+			targetAddr := fmt.Sprintf("%s:%s", containerIP, containerPort)
+
+			p := proxy.NewTCPProxy(listenAddr, targetAddr)
+			if err := p.StartAsync(); err != nil {
+				d.logger.Warn("failed to start TCP proxy", "listen", listenAddr, "target", targetAddr, "error", err)
+				continue
+			}
+			d.logger.Info("started TCP proxy", "listen", listenAddr, "target", targetAddr)
+			handle.AddProxy(p)
 		}
 	}
 
-	// Create handle
-	handle := newTaskHandle(d.client, d.logger, containerID, &taskConfig)
+	// Build DriverNetwork with Tailscale hostname if available
+	if tailscale.Running && tailscale.DNSName != "" {
+		// Use Tailscale MagicDNS name for cross-node communication
+		driverNetwork = &drivers.DriverNetwork{
+			IP:            tailscale.DNSName,
+			AutoAdvertise: true,
+		}
+		d.logger.Info("using tailscale for service registration", "dns_name", tailscale.DNSName)
+	} else if containerIP != "" {
+		// Fall back to container IP (local-only access)
+		driverNetwork = &drivers.DriverNetwork{
+			IP:            containerIP,
+			AutoAdvertise: true,
+		}
+	}
 
 	// Store the handle
 	d.tasksLock.Lock()

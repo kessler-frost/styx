@@ -171,27 +171,98 @@ curl http://nginx.service.consul:80/
 
 ---
 
-## Phase 4: Networking
+## Phase 4: Networking ✓
 
 ### Prerequisites
 - Phase 3 tests passing
-- Tailscale installed and authenticated
+- Tailscale installed and authenticated on both Macs
+- Both Macs on the same Tailnet
 
 ### Test Cases
 
-#### 4.1 Container Gets Tailscale IP
+#### 4.1 Tailscale Detection ✓
 ```bash
-nomad job run example/nginx.nomad
-container inspect <container-id> | grep tailscale
-# Expected: Container has Tailscale IP
+# Build and reinitialize styx
+make build-all
+styx stop && styx init --server
+# Expected: Shows "Tailscale connected: <hostname>.ts.net (<ip>)"
 ```
 
-#### 4.2 Cross-Node Communication
+#### 4.2 TCP Proxy Running ✓
 ```bash
-# Start nginx on Node A, alpine on Node B
-# From alpine container:
-curl http://<nginx-tailscale-ip>
+nomad job run example/nginx.nomad
+lsof -i :10080
+# Expected: Shows styx task driver listening on port 10080
+```
+
+#### 4.3 Local Access via Proxy ✓
+```bash
+curl http://localhost:10080
 # Expected: Returns nginx welcome page
+```
+
+#### 4.4 Access via Tailscale Hostname ✓
+```bash
+curl http://fimbulwinter.panthera-frog.ts.net:10080
+# Expected: Returns nginx welcome page (replace with your hostname)
+```
+
+#### 4.5 Health Check Working ✓
+```bash
+consul catalog services
+nomad job status nginx | grep -A5 "Service Status"
+# Expected: Service shows as healthy
+```
+
+#### 4.6 Service Registered with Tailscale Hostname ✓
+```bash
+dig @127.0.0.1 -p 8600 nginx.service.consul +short
+# Expected: Returns Tailscale MagicDNS name (e.g., fimbulwinter.panthera-frog.ts.net)
+```
+
+#### 4.7 Cross-Node Communication
+```bash
+# On Mac A (fimbulwinter): Start nginx
+styx init --server
+nomad job run example/nginx.nomad
+
+# On Mac B (styx): Join and access
+styx join fimbulwinter.panthera-frog.ts.net
+curl http://fimbulwinter.panthera-frog.ts.net:10080
+# Expected: Returns nginx welcome page
+
+curl http://nginx.service.consul:10080
+# Expected: Returns nginx welcome page via Consul DNS
+```
+
+### Phase 4 Notes
+
+**Port Mapping Convention**:
+- Container port 80 → Host port 10080
+- Container port 443 → Host port 10443
+- Container port 8080 → Host port 18080
+- General rule: host_port = container_port + 10000
+
+**Job Spec Format**:
+```hcl
+network {
+  port "http" {
+    static = 10080  # Host port
+  }
+}
+
+task "myapp" {
+  config {
+    ports = ["80:10080"]  # containerPort:hostPort
+  }
+  service {
+    address_mode = "driver"  # Uses Tailscale hostname
+    check {
+      type = "tcp"
+      port = "http"  # Works via proxy
+    }
+  }
+}
 ```
 
 ---

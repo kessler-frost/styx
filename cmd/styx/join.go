@@ -99,6 +99,16 @@ func runJoin(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Printf("Detected local IP: %s\n", ip)
 
+	// Check Tailscale status for Phase 4 networking
+	tailscale := network.GetTailscaleInfo()
+	if tailscale.Running {
+		fmt.Printf("Tailscale connected: %s (%s)\n", tailscale.DNSName, tailscale.IP)
+		fmt.Println("  Services will be reachable via Tailscale from other nodes")
+	} else {
+		fmt.Println("Tailscale not connected (cross-node networking will be limited)")
+		fmt.Println("  Install Tailscale: https://tailscale.com/download")
+	}
+
 	// Create directories
 	dirs := []string{
 		dataDir,

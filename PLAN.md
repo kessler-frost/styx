@@ -49,14 +49,17 @@
 
 ---
 
-## Phase 4: Networking
+## Phase 4: Networking ✓
 **Goal**: Containers communicate across Macs via Tailscale
 
-- [ ] Configure container networking with Tailscale IPs
-- [ ] Register Tailscale IPs in Consul
-- [ ] Cross-node container communication
+- [x] Tailscale detection utility (`internal/network/tailscale.go`)
+- [x] TCP proxy for port forwarding (`internal/proxy/tcp.go`)
+- [x] Task driver starts proxies and returns Tailscale hostname
+- [x] Services registered with Tailscale MagicDNS names
+- [x] Health checks now work via host port proxy
+- [x] init/join commands show Tailscale status
 
-**Deliverable**: Container on Mac A talks to container on Mac B
+**Deliverable**: Container on Mac A talks to container on Mac B (COMPLETE)
 
 ---
 
@@ -165,3 +168,13 @@
 - Services must use `address_mode = "driver"` and be defined inside the task block
 - Health checks will fail until Phase 4 networking because localhost can't reach containers
 - DNS resolver for .consul domain requires `/etc/resolver/consul` with nameserver 127.0.0.1 port 8600
+
+### Phase 4 Discoveries
+
+- Subnet collision problem: all Macs use same 192.168.64.0/24 vmnet subnet, so direct LAN routing won't work
+- Solution: TCP proxy in task driver bridges Tailscale → container network
+- Port mapping convention: hostPort = containerPort + 10000 (e.g., 80 → 10080)
+- Task driver returns Tailscale MagicDNS hostname (e.g., `fimbulwinter.panthera-frog.ts.net`) in DriverNetwork
+- Services registered in Consul with Tailscale hostname, accessible from any node on the tailnet
+- Health checks work now because they connect via host port proxy
+- Tailscale MagicDNS resolves machine names; Consul DNS resolves service names

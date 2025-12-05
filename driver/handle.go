@@ -8,6 +8,7 @@ import (
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/nomad/plugins/drivers"
 	"github.com/kessler-frost/styx/driver/container"
+	"github.com/kessler-frost/styx/internal/proxy"
 )
 
 // taskHandle tracks a running container
@@ -21,6 +22,9 @@ type taskHandle struct {
 
 	// taskConfig contains the task configuration
 	taskConfig *TaskConfig
+
+	// proxies holds TCP proxies for port forwarding (Phase 4 networking)
+	proxies []*proxy.TCPProxy
 
 	// startedAt is the time the container was started
 	startedAt time.Time
@@ -80,9 +84,20 @@ func (h *taskHandle) run() {
 	}
 }
 
-// shutdown stops monitoring the container
+// shutdown stops monitoring the container and cleans up proxies
 func (h *taskHandle) shutdown() {
 	h.cancel()
+
+	// Stop all TCP proxies
+	for _, p := range h.proxies {
+		p.Stop()
+	}
+	h.proxies = nil
+}
+
+// AddProxy adds a TCP proxy to the handle for lifecycle management
+func (h *taskHandle) AddProxy(p *proxy.TCPProxy) {
+	h.proxies = append(h.proxies, p)
 }
 
 // IsRunning returns whether the container is running
