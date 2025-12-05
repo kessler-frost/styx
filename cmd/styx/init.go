@@ -160,8 +160,9 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 
 	// Wait for Nomad to become healthy
+	// Nomad can take 40+ seconds to start due to plugin loading and client registration
 	fmt.Println("Waiting for Nomad to become healthy...")
-	if err := waitForNomadHealth(30 * time.Second); err != nil {
+	if err := waitForNomadHealth(60 * time.Second); err != nil {
 		return fmt.Errorf("nomad failed to start: %w\nCheck logs at %s", err, filepath.Join(logDir, "nomad.log"))
 	}
 
