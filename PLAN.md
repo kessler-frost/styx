@@ -38,10 +38,10 @@
 ## Phase 3: Service Discovery
 **Goal**: Services find each other
 
-- [ ] Add Consul to the stack
-- [ ] Consul DNS for service names
+- [x] Add Consul to the stack
+- [x] Consul DNS for service names
 - [ ] Consul KV for configuration
-- [ ] Health checks in Consul
+- [x] Health checks in Consul
 
 **Deliverable**: `curl http://myservice.service.consul` works
 

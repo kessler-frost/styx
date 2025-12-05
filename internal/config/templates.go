@@ -27,6 +27,10 @@ plugin "apple-container" {
     container_bin_path = "/usr/local/bin/container"
   }
 }
+
+consul {
+  address = "127.0.0.1:8500"
+}
 `
 
 // ClientConfigTemplate is the HCL template for a Nomad client node.
@@ -51,5 +55,9 @@ plugin "apple-container" {
   config {
     container_bin_path = "/usr/local/bin/container"
   }
+}
+
+consul {
+  address = "127.0.0.1:8500"
 }
 `

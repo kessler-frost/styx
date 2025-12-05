@@ -13,10 +13,11 @@ var (
 	Version = "dev"
 
 	// Global flags
-	dataDir   string
-	configDir string
-	pluginDir string
-	logDir    string
+	dataDir       string
+	configDir     string
+	pluginDir     string
+	logDir        string
+	consulDataDir string
 )
 
 var rootCmd = &cobra.Command{
@@ -34,9 +35,10 @@ func init() {
 	styxBase := filepath.Join(home, "Library", "Application Support", "styx")
 
 	rootCmd.PersistentFlags().StringVar(&dataDir, "data-dir", filepath.Join(styxBase, "nomad"), "Nomad data directory")
-	rootCmd.PersistentFlags().StringVar(&configDir, "config-dir", filepath.Join(styxBase, "config"), "Nomad config directory")
+	rootCmd.PersistentFlags().StringVar(&configDir, "config-dir", filepath.Join(styxBase, "config"), "Config directory")
 	rootCmd.PersistentFlags().StringVar(&pluginDir, "plugin-dir", filepath.Join(styxBase, "plugins"), "Plugin directory")
 	rootCmd.PersistentFlags().StringVar(&logDir, "log-dir", filepath.Join(home, "Library", "Logs", "styx"), "Log directory")
+	rootCmd.PersistentFlags().StringVar(&consulDataDir, "consul-data-dir", filepath.Join(styxBase, "consul"), "Consul data directory")
 }
 
 func Execute() error {

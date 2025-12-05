@@ -65,9 +65,25 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Println("Service:     running")
 
-	// Check Nomad health
 	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get("http://127.0.0.1:4646/v1/agent/health")
+
+	// Check Consul health
+	consulHealthy := false
+	resp, err := client.Get("http://127.0.0.1:8500/v1/status/leader")
+	if err != nil {
+		fmt.Println("Consul:      not responding")
+	} else {
+		resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			fmt.Println("Consul:      healthy")
+			consulHealthy = true
+		} else {
+			fmt.Println("Consul:      unhealthy")
+		}
+	}
+
+	// Check Nomad health
+	resp, err = client.Get("http://127.0.0.1:4646/v1/agent/health")
 	if err != nil {
 		fmt.Println("Nomad:       not responding")
 		fmt.Printf("\nNomad may still be starting. Check logs at: %s\n", logDir)
@@ -127,9 +143,34 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	// Show connected servers if client
 	if !isServer && self.Stats.Client != nil {
 		if known, ok := self.Stats.Client["known_servers"]; ok && known != "" {
-			fmt.Printf("\nConnected Servers: %s\n", known)
+			fmt.Printf("\nConnected Nomad Servers: %s\n", known)
 		}
 	}
+
+	// Show Consul members if healthy
+	if consulHealthy {
+		resp, err = client.Get("http://127.0.0.1:8500/v1/agent/members")
+		if err == nil {
+			defer resp.Body.Close()
+			var consulMembers []struct {
+				Name   string `json:"Name"`
+				Addr   string `json:"Addr"`
+				Status int    `json:"Status"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&consulMembers); err == nil && len(consulMembers) > 0 {
+				fmt.Println("\nConsul Members:")
+				for _, m := range consulMembers {
+					status := "alive"
+					if m.Status != 1 {
+						status = "failed"
+					}
+					fmt.Printf("  - %s (%s) [%s]\n", m.Name, m.Addr, status)
+				}
+			}
+		}
+	}
+
+	fmt.Println("\nConsul UI: http://127.0.0.1:8500")
 
 	return nil
 }

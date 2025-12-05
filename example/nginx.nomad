@@ -5,6 +5,24 @@ job "nginx" {
   group "web" {
     count = 1
 
+    network {
+      port "http" {
+        static = 8080
+      }
+    }
+
+    service {
+      name = "nginx"
+      port = "http"
+
+      check {
+        type     = "http"
+        path     = "/"
+        interval = "10s"
+        timeout  = "2s"
+      }
+    }
+
     task "nginx" {
       driver = "apple-container"
 

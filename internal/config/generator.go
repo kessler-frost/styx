@@ -24,6 +24,20 @@ type ClientConfig struct {
 	PluginDir   string   // Path to task driver plugins
 }
 
+// ConsulServerConfig holds the configuration values for a Consul server node.
+type ConsulServerConfig struct {
+	DataDir         string // e.g., ~/Library/Application Support/styx/consul
+	AdvertiseIP     string // Local IP for cluster communication
+	BootstrapExpect int    // Number of servers to expect (usually 1 for single node)
+}
+
+// ConsulClientConfig holds the configuration values for a Consul client node.
+type ConsulClientConfig struct {
+	DataDir     string   // e.g., ~/Library/Application Support/styx/consul
+	AdvertiseIP string   // Local IP for cluster communication
+	Servers     []string // Server IPs to join
+}
+
 // GenerateServerConfig renders the server HCL template with the given config.
 func GenerateServerConfig(cfg ServerConfig) (string, error) {
 	tmpl, err := template.New("server").Parse(ServerConfigTemplate)
@@ -49,6 +63,36 @@ func GenerateClientConfig(cfg ClientConfig) (string, error) {
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, cfg); err != nil {
 		return "", fmt.Errorf("failed to render client config: %w", err)
+	}
+
+	return buf.String(), nil
+}
+
+// GenerateConsulServerConfig renders the Consul server HCL template with the given config.
+func GenerateConsulServerConfig(cfg ConsulServerConfig) (string, error) {
+	tmpl, err := template.New("consul-server").Parse(ConsulServerConfigTemplate)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse consul server template: %w", err)
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, cfg); err != nil {
+		return "", fmt.Errorf("failed to render consul server config: %w", err)
+	}
+
+	return buf.String(), nil
+}
+
+// GenerateConsulClientConfig renders the Consul client HCL template with the given config.
+func GenerateConsulClientConfig(cfg ConsulClientConfig) (string, error) {
+	tmpl, err := template.New("consul-client").Parse(ConsulClientConfigTemplate)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse consul client template: %w", err)
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, cfg); err != nil {
+		return "", fmt.Errorf("failed to render consul client config: %w", err)
 	}
 
 	return buf.String(), nil
