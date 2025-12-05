@@ -191,6 +191,24 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 
 	d.logger.Info("container started", "container_id", containerID)
 
+	// Get container network info for service registration
+	var driverNetwork *drivers.DriverNetwork
+	info, err := d.client.Inspect(d.ctx, containerID)
+	if err != nil {
+		d.logger.Warn("failed to inspect container for network info", "error", err)
+	} else if len(info.Networks) > 0 {
+		// Extract IP from address (format: "192.168.64.4/24")
+		addr := info.Networks[0].Address
+		if idx := strings.Index(addr, "/"); idx > 0 {
+			addr = addr[:idx]
+		}
+		d.logger.Info("container network info", "ip", addr)
+		driverNetwork = &drivers.DriverNetwork{
+			IP:            addr,
+			AutoAdvertise: true,
+		}
+	}
+
 	// Create handle
 	handle := newTaskHandle(d.client, d.logger, containerID, &taskConfig)
 
@@ -216,7 +234,7 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 		return nil, nil, fmt.Errorf("failed to set driver state: %w", err)
 	}
 
-	return taskHandle, nil, nil
+	return taskHandle, driverNetwork, nil
 }
 
 // RecoverTask restores a task from a previous driver state

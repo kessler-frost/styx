@@ -35,15 +35,17 @@
 
 ---
 
-## Phase 3: Service Discovery
+## Phase 3: Service Discovery ✓
 **Goal**: Services find each other
 
 - [x] Add Consul to the stack
 - [x] Consul DNS for service names
-- [ ] Consul KV for configuration
-- [x] Health checks in Consul
+- [ ] Consul KV for configuration (deferred - not needed yet)
+- [x] Health checks in Consul (disabled until Phase 4 networking)
+- [x] Task driver returns DriverNetwork with container IP
+- [x] Service registration with container IP via `address_mode = "driver"`
 
-**Deliverable**: `curl http://myservice.service.consul` works
+**Deliverable**: `curl http://myservice.service.consul` works (COMPLETE)
 
 ---
 
@@ -154,4 +156,12 @@
 
 ## Notes
 
-_Add implementation notes, discoveries, and changes here as you go._
+### Phase 3 Discoveries
+
+- Apple Containers get IPv4 addresses on the 192.168.64.x subnet (vmnet)
+- Containers are reachable from the host via their container IP, not localhost
+- Port mapping (`-p 80:8080`) doesn't expose ports to localhost like Docker
+- The task driver must return `DriverNetwork` with the container's IP for proper service registration
+- Services must use `address_mode = "driver"` and be defined inside the task block
+- Health checks will fail until Phase 4 networking because localhost can't reach containers
+- DNS resolver for .consul domain requires `/etc/resolver/consul` with nameserver 127.0.0.1 port 8600

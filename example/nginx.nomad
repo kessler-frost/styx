@@ -11,18 +11,6 @@ job "nginx" {
       }
     }
 
-    service {
-      name = "nginx"
-      port = "http"
-
-      check {
-        type     = "http"
-        path     = "/"
-        interval = "10s"
-        timeout  = "2s"
-      }
-    }
-
     task "nginx" {
       driver = "apple-container"
 
@@ -34,6 +22,14 @@ job "nginx" {
       resources {
         cpu    = 10
         memory = 32
+      }
+
+      service {
+        name = "nginx"
+        port = "http"
+        address_mode = "driver"
+        # Health check disabled until Phase 4 networking
+        # (Apple Containers don't expose ports to localhost)
       }
     }
   }
