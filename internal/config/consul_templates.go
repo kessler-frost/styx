@@ -4,6 +4,7 @@ package config
 // Server nodes participate in consensus and provide the service catalog.
 const ConsulServerConfigTemplate = `data_dir = "{{.DataDir}}"
 bind_addr = "0.0.0.0"
+client_addr = "0.0.0.0"
 advertise_addr = "{{.AdvertiseIP}}"
 datacenter = "dc1"
 
@@ -28,6 +29,7 @@ connect {
 // Client nodes forward requests to servers and cache results locally.
 const ConsulClientConfigTemplate = `data_dir = "{{.DataDir}}"
 bind_addr = "0.0.0.0"
+client_addr = "0.0.0.0"
 advertise_addr = "{{.AdvertiseIP}}"
 datacenter = "dc1"
 
