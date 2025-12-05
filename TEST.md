@@ -115,39 +115,59 @@ styx init --server
 
 ---
 
-## Phase 3: Service Discovery
+## Phase 3: Service Discovery ✓
 
 ### Prerequisites
 - Phase 2 tests passing
-- Consul installed
+- Consul installed (`mise install consul` or `brew install consul`)
 
 ### Test Cases
 
-#### 3.1 Consul Agent Running
+#### 3.1 Consul Agent Running ✓
 ```bash
 consul members
 # Expected: Shows cluster members
 ```
 
-#### 3.2 Service Registration
+#### 3.2 Service Registration ✓
 ```bash
 nomad job run example/nginx.nomad
 consul catalog services
 # Expected: Shows nginx service
 ```
 
-#### 3.3 DNS Resolution
+#### 3.3 DNS Resolution ✓
 ```bash
-dig @127.0.0.1 -p 8600 nginx.service.consul
-# Expected: Returns container IP
+dig @127.0.0.1 -p 8600 nginx.service.consul +short
+# Expected: Returns container IP (e.g., 192.168.64.x)
 ```
 
-#### 3.4 KV Store
+#### 3.4 KV Store ✓
 ```bash
 consul kv put config/test "hello"
 consul kv get config/test
 # Expected: Returns "hello"
 ```
+
+#### 3.5 Service Accessible via DNS ✓
+```bash
+curl http://nginx.service.consul:80/
+# Expected: Returns nginx welcome page
+```
+
+### Phase 3 Notes
+
+**Important**: For service DNS to work correctly:
+1. Services must be defined inside the `task` block (not group level)
+2. Services must use `address_mode = "driver"` to register with container IP
+3. The task driver returns `DriverNetwork` with the container's IPv4 address
+4. DNS resolver must be configured: `/etc/resolver/consul` with `nameserver 127.0.0.1` and `port 8600`
+
+**Apple Container Networking**:
+- Containers get IPv4 addresses on 192.168.64.x subnet (vmnet)
+- Containers are reachable from host via container IP, NOT localhost
+- Port mapping (`-p 80:8080`) does NOT expose to localhost like Docker
+- Health checks disabled until Phase 4 (localhost can't reach container ports)
 
 ---
 

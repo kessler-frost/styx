@@ -40,7 +40,7 @@
 
 - [x] Add Consul to the stack
 - [x] Consul DNS for service names
-- [ ] Consul KV for configuration (deferred - not needed yet)
+- [x] Consul KV for configuration
 - [x] Health checks in Consul (disabled until Phase 4 networking)
 - [x] Task driver returns DriverNetwork with container IP
 - [x] Service registration with container IP via `address_mode = "driver"`
