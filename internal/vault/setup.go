@@ -1,7 +1,6 @@
 package vault
 
 import (
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -150,15 +149,8 @@ func GetRootToken(secretsDir string) (string, error) {
 
 // waitForNomadJWKS waits for Nomad's JWKS endpoint to become available.
 func waitForNomadJWKS(timeout time.Duration) error {
-	jwksURL := "https://127.0.0.1:4646/.well-known/jwks.json"
-
-	// Create HTTP client that skips TLS verification (we're connecting locally)
-	client := &http.Client{
-		Timeout: 5 * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		},
-	}
+	jwksURL := "http://127.0.0.1:4646/.well-known/jwks.json"
+	client := &http.Client{Timeout: 5 * time.Second}
 
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
@@ -178,7 +170,7 @@ func waitForNomadJWKS(timeout time.Duration) error {
 
 // SetupNomadIntegration configures Vault JWT auth for Nomad workload identities.
 // This is the modern approach for Nomad 1.7+ that uses short-lived tokens.
-func SetupNomadIntegration(secretsDir string, nomadCAPath string) error {
+func SetupNomadIntegration(secretsDir string) error {
 	rootToken, err := GetRootToken(secretsDir)
 	if err != nil {
 		return err
@@ -231,15 +223,10 @@ path "secret/metadata/*" {
 
 	// Configure JWT auth with Nomad's JWKS endpoint
 	// The JWKS endpoint is served by Nomad at /.well-known/jwks.json
-	// Use @file syntax to read CA PEM from file (handles multi-line content)
-	args := []string{"write", "auth/jwt-nomad/config",
-		"jwks_url=https://127.0.0.1:4646/.well-known/jwks.json",
+	cmd = exec.Command("vault", "write", "auth/jwt-nomad/config",
+		"jwks_url=http://127.0.0.1:4646/.well-known/jwks.json",
 		"default_role=nomad-workloads",
-	}
-	if nomadCAPath != "" {
-		args = append(args, "jwks_ca_pem=@"+nomadCAPath)
-	}
-	cmd = exec.Command("vault", args...)
+	)
 	cmd.Env = env
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to configure JWT auth: %w\nOutput: %s", err, output)

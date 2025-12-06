@@ -32,9 +32,9 @@ consul {
   address = "127.0.0.1:8500"
 }
 
-# TLS Configuration
+# TLS Configuration - RPC only (HTTP uses Tailscale for transport security)
 tls {
-  http = true
+  http = false
   rpc  = true
   ca_file   = "{{.CAFile}}"
   cert_file = "{{.CertFile}}"
@@ -85,9 +85,9 @@ consul {
   address = "127.0.0.1:8500"
 }
 
-# TLS Configuration
+# TLS Configuration - RPC only (HTTP uses Tailscale for transport security)
 tls {
-  http = true
+  http = false
   rpc  = true
   ca_file   = "{{.CAFile}}"
   cert_file = "{{.CertFile}}"

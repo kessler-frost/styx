@@ -1,7 +1,6 @@
 package main
 
 import (
-	cryptotls "crypto/tls"
 	"fmt"
 	"io"
 	"net/http"
@@ -41,13 +40,8 @@ func init() {
 func runInit(cmd *cobra.Command, args []string) error {
 	// Check if already running and healthy
 	if launchd.IsLoaded("com.styx.nomad") {
-		client := &http.Client{
-			Timeout: 2 * time.Second,
-			Transport: &http.Transport{
-				TLSClientConfig: &cryptotls.Config{InsecureSkipVerify: true},
-			},
-		}
-		resp, err := client.Get("https://127.0.0.1:4646/v1/agent/health")
+		client := &http.Client{Timeout: 2 * time.Second}
+		resp, err := client.Get("http://127.0.0.1:4646/v1/agent/health")
 		if err == nil && resp.StatusCode == http.StatusOK {
 			resp.Body.Close()
 			fmt.Println("Styx is already running and healthy")
@@ -499,14 +493,13 @@ wait
 
 		// Wait for Vault to become active (leader elected)
 		fmt.Println("Waiting for Vault to become active...")
-		if err := waitForVaultActive(30 * time.Second); err != nil {
+		if err := waitForVaultActive(60 * time.Second); err != nil {
 			return fmt.Errorf("vault failed to become active: %w", err)
 		}
 
 		// Setup Nomad integration with workload identities
 		fmt.Println("Setting up Vault-Nomad integration...")
-		nomadCAPath := filepath.Join(certsDir, "nomad-agent-ca.pem")
-		if err := vault.SetupNomadIntegration(secretsDir, nomadCAPath); err != nil {
+		if err := vault.SetupNomadIntegration(secretsDir); err != nil {
 			fmt.Printf("Warning: failed to setup Vault-Nomad integration: %v\n", err)
 			fmt.Println("You can set this up later with 'vault policy write' and 'vault token create'")
 		}
@@ -542,17 +535,10 @@ wait
 
 func waitForNomadHealth(timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
-	// Use HTTPS since we have TLS enabled on Nomad HTTP API
-	// Skip certificate verification for localhost health checks
-	client := &http.Client{
-		Timeout: 2 * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig: &cryptotls.Config{InsecureSkipVerify: true},
-		},
-	}
+	client := &http.Client{Timeout: 2 * time.Second}
 
 	for time.Now().Before(deadline) {
-		resp, err := client.Get("https://127.0.0.1:4646/v1/agent/health")
+		resp, err := client.Get("http://127.0.0.1:4646/v1/agent/health")
 		if err == nil {
 			resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
