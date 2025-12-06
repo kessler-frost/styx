@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	cryptotls "crypto/tls"
 	"fmt"
 	"io"
@@ -426,14 +425,6 @@ wait
 		return fmt.Errorf("failed to write wrapper script: %w", err)
 	}
 
-	// Setup DNS resolver for .consul domain (requires sudo)
-	fmt.Println("Setting up DNS resolver for .consul domain...")
-	if err := setupConsulDNS(); err != nil {
-		fmt.Printf("Warning: failed to setup DNS resolver: %v\n", err)
-		fmt.Println("You can manually create /etc/resolver/consul with:")
-		fmt.Println("  nameserver 127.0.0.1")
-		fmt.Println("  port 8600")
-	}
 
 	// Generate and write launchd plist (user agent)
 	home, _ := os.UserHomeDir()
@@ -504,6 +495,12 @@ wait
 			if err := vault.Unseal(secretsDir); err != nil {
 				return fmt.Errorf("failed to unseal vault: %w", err)
 			}
+		}
+
+		// Wait for Vault to become active (leader elected)
+		fmt.Println("Waiting for Vault to become active...")
+		if err := waitForVaultActive(30 * time.Second); err != nil {
+			return fmt.Errorf("vault failed to become active: %w", err)
 		}
 
 		// Setup Nomad integration with workload identities
@@ -610,25 +607,24 @@ func waitForVaultHealth(timeout time.Duration) error {
 	return fmt.Errorf("timeout waiting for vault health")
 }
 
-func setupConsulDNS() error {
-	// Create /etc/resolver directory if it doesn't exist
-	// Then create /etc/resolver/consul with DNS config
-	resolverContent := "nameserver 127.0.0.1\nport 8600\n"
+func waitForVaultActive(timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	client := &http.Client{Timeout: 2 * time.Second}
 
-	// Use sudo to write to /etc/resolver/consul
-	cmd := exec.Command("sudo", "mkdir", "-p", "/etc/resolver")
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to create /etc/resolver: %w", err)
+	for time.Now().Before(deadline) {
+		resp, err := client.Get("http://127.0.0.1:8200/v1/sys/health")
+		if err == nil {
+			resp.Body.Close()
+			// 200 means Vault is initialized, unsealed, AND active (leader)
+			if resp.StatusCode == 200 {
+				return nil
+			}
+		}
+		time.Sleep(1 * time.Second)
+		fmt.Print(".")
 	}
-
-	cmd = exec.Command("sudo", "tee", "/etc/resolver/consul")
-	cmd.Stdin = bytes.NewBufferString(resolverContent)
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to write /etc/resolver/consul: %w", err)
-	}
-
-	fmt.Println("DNS resolver configured for .consul domain")
-	return nil
+	fmt.Println()
+	return fmt.Errorf("timeout waiting for vault to become active")
 }
 
 func copyFile(src, dst string) error {

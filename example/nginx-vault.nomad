@@ -7,7 +7,7 @@ job "nginx-vault" {
 
     network {
       port "http" {
-        static = 10081
+        static = 10082
       }
     }
 
@@ -19,12 +19,13 @@ job "nginx-vault" {
         port         = "http"
         address_mode = "driver"
 
+        # Note: address_mode="driver" for checks only works with Docker driver
+        # For external drivers, use host mode with the port label
         check {
-          type         = "tcp"
-          port         = "http"
-          interval     = "10s"
-          timeout      = "2s"
-          address_mode = "driver"
+          type     = "tcp"
+          port     = "http"
+          interval = "10s"
+          timeout  = "2s"
         }
       }
 
@@ -37,7 +38,7 @@ job "nginx-vault" {
 
       config {
         image = "docker.io/library/nginx:alpine"
-        ports = ["80:10081"]
+        ports = ["10082:80"]
       }
 
       # Template that injects Vault secrets as environment variables

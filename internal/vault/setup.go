@@ -1,12 +1,15 @@
 package vault
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // InitOutput holds the output from vault operator init.
@@ -145,6 +148,34 @@ func GetRootToken(secretsDir string) (string, error) {
 	return initOutput.RootToken, nil
 }
 
+// waitForNomadJWKS waits for Nomad's JWKS endpoint to become available.
+func waitForNomadJWKS(timeout time.Duration) error {
+	jwksURL := "https://127.0.0.1:4646/.well-known/jwks.json"
+
+	// Create HTTP client that skips TLS verification (we're connecting locally)
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
+	}
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		resp, err := client.Get(jwksURL)
+		if err == nil && resp.StatusCode == 200 {
+			resp.Body.Close()
+			return nil
+		}
+		if resp != nil {
+			resp.Body.Close()
+		}
+		time.Sleep(2 * time.Second)
+	}
+
+	return fmt.Errorf("timeout waiting for Nomad JWKS endpoint at %s", jwksURL)
+}
+
 // SetupNomadIntegration configures Vault JWT auth for Nomad workload identities.
 // This is the modern approach for Nomad 1.7+ that uses short-lived tokens.
 func SetupNomadIntegration(secretsDir string, nomadCAPath string) error {
@@ -192,6 +223,12 @@ path "secret/metadata/*" {
 	// Ignore error if already enabled
 	_ = cmd.Run()
 
+	// Wait for Nomad's JWKS endpoint to be ready before configuring JWT auth
+	// Vault validates the JWKS URL when writing config, so it must be available
+	if err := waitForNomadJWKS(60 * time.Second); err != nil {
+		return fmt.Errorf("Nomad JWKS not available: %w", err)
+	}
+
 	// Configure JWT auth with Nomad's JWKS endpoint
 	// The JWKS endpoint is served by Nomad at /.well-known/jwks.json
 	// Use @file syntax to read CA PEM from file (handles multi-line content)
@@ -215,7 +252,6 @@ path "secret/metadata/*" {
 		"bound_audiences=vault.io",
 		"user_claim=/nomad_job_id",
 		"user_claim_json_pointer=true",
-		"claim_mappings={\"nomad_namespace\":\"nomad_namespace\",\"nomad_job_id\":\"nomad_job_id\",\"nomad_task\":\"nomad_task\"}",
 		"token_type=service",
 		"token_policies=nomad-workloads",
 		"token_period=30m",

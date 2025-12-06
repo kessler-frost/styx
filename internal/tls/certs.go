@@ -40,10 +40,14 @@ func GenerateCA(certsDir string) error {
 }
 
 // GenerateServerCert generates a server certificate for Consul.
+// Existing certs are deleted and regenerated.
 func GenerateServerCert(certsDir, datacenter string) (*CertPaths, error) {
 	if err := os.MkdirAll(certsDir, 0700); err != nil {
 		return nil, fmt.Errorf("failed to create certs directory: %w", err)
 	}
+
+	// Delete existing server certs (allows reinit without manual cleanup)
+	deleteExistingCerts(certsDir, datacenter+"-server-consul")
 
 	// Generate server certificate
 	cmd := exec.Command("consul", "tls", "cert", "create", "-server", "-dc", datacenter)
@@ -67,10 +71,14 @@ func GenerateServerCert(certsDir, datacenter string) (*CertPaths, error) {
 }
 
 // GenerateClientCert generates a client certificate for Consul.
+// Existing certs are deleted and regenerated.
 func GenerateClientCert(certsDir, datacenter string) (*CertPaths, error) {
 	if err := os.MkdirAll(certsDir, 0700); err != nil {
 		return nil, fmt.Errorf("failed to create certs directory: %w", err)
 	}
+
+	// Delete existing client certs (allows reinit without manual cleanup)
+	deleteExistingCerts(certsDir, datacenter+"-client-consul")
 
 	// Generate client certificate
 	cmd := exec.Command("consul", "tls", "cert", "create", "-client", "-dc", datacenter)
@@ -177,6 +185,22 @@ func findLatestCert(dir, prefix string) (certFile, keyFile string, err error) {
 	return certFile, keyFile, nil
 }
 
+// deleteExistingCerts removes existing certificate files matching the prefix.
+// This allows regenerating certs without manual cleanup.
+func deleteExistingCerts(dir, prefix string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return // Directory doesn't exist or can't be read, nothing to delete
+	}
+
+	for _, entry := range entries {
+		name := entry.Name()
+		if strings.HasPrefix(name, prefix) && strings.HasSuffix(name, ".pem") {
+			os.Remove(filepath.Join(dir, name))
+		}
+	}
+}
+
 // GetExistingCerts returns paths to existing certificates if they exist.
 func GetExistingCerts(certsDir, datacenter string, isServer bool) (*CertPaths, error) {
 	caFile := filepath.Join(certsDir, "consul-agent-ca.pem")
@@ -234,10 +258,14 @@ func GenerateNomadCA(certsDir string) error {
 }
 
 // GenerateNomadServerCert generates a server certificate for Nomad.
+// Existing certs are deleted and regenerated.
 func GenerateNomadServerCert(certsDir, region string) (*NomadCertPaths, error) {
 	if err := os.MkdirAll(certsDir, 0700); err != nil {
 		return nil, fmt.Errorf("failed to create certs directory: %w", err)
 	}
+
+	// Delete existing server certs (allows reinit without manual cleanup)
+	deleteExistingCerts(certsDir, region+"-server-nomad")
 
 	// Generate server certificate
 	cmd := exec.Command("nomad", "tls", "cert", "create", "-server", "-region", region)
@@ -261,10 +289,14 @@ func GenerateNomadServerCert(certsDir, region string) (*NomadCertPaths, error) {
 }
 
 // GenerateNomadClientCert generates a client certificate for Nomad.
+// Existing certs are deleted and regenerated.
 func GenerateNomadClientCert(certsDir, region string) (*NomadCertPaths, error) {
 	if err := os.MkdirAll(certsDir, 0700); err != nil {
 		return nil, fmt.Errorf("failed to create certs directory: %w", err)
 	}
+
+	// Delete existing client certs (allows reinit without manual cleanup)
+	deleteExistingCerts(certsDir, region+"-client-nomad")
 
 	// Generate client certificate
 	cmd := exec.Command("nomad", "tls", "cert", "create", "-client", "-region", region)

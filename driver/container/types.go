@@ -80,10 +80,10 @@ type DNS struct {
 }
 
 type Mount struct {
-	Type     string `json:"type"`
-	Source   string `json:"source"`
-	Target   string `json:"target"`
-	ReadOnly bool   `json:"readonly"`
+	Type        interface{} `json:"type"`        // Can be object like {"virtiofs":{}} or string
+	Source      string      `json:"source"`
+	Destination string      `json:"destination"` // Apple container uses "destination", not "target"
+	Options     []string    `json:"options"`
 }
 
 type PublishedPort struct {

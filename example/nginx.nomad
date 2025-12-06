@@ -16,7 +16,7 @@ job "nginx" {
 
       config {
         image = "nginx:latest"
-        ports = ["80:10080"]  # containerPort:hostPort
+        ports = ["10080:80"]  # hostPort:containerPort
       }
 
       resources {

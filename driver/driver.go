@@ -166,6 +166,18 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 
 	d.logger.Info("starting task", "task_id", cfg.ID, "image", taskConfig.Image)
 
+	// Get task directories for auto-mounting (like Docker driver)
+	// Templates render to LocalDir, secrets to SecretsDir
+	taskDir := cfg.TaskDir()
+	autoMounts := []string{
+		fmt.Sprintf("%s:/local", taskDir.LocalDir),
+		fmt.Sprintf("%s:/secrets", taskDir.SecretsDir),
+		fmt.Sprintf("%s:/alloc", taskDir.SharedAllocDir),
+	}
+	// Merge: auto-mounts first, then user volumes (user can override)
+	allVolumes := append(autoMounts, taskConfig.Volumes...)
+	d.logger.Debug("volume mounts", "auto", autoMounts, "user", taskConfig.Volumes, "all", allVolumes)
+
 	// Sanitize container name - Apple container CLI doesn't allow slashes
 	containerName := strings.ReplaceAll(cfg.ID, "/", "-")
 
@@ -177,7 +189,7 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 		Args:       taskConfig.Args,
 		Env:        taskConfig.Env,
 		Ports:      taskConfig.Ports,
-		Volumes:    taskConfig.Volumes,
+		Volumes:    allVolumes,
 		Memory:     taskConfig.Memory,
 		CPUs:       taskConfig.CPUs,
 		WorkingDir: taskConfig.WorkingDir,
@@ -192,6 +204,16 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 	}
 
 	d.logger.Info("container started", "container_id", containerID)
+
+	// Track if we encounter an error after container starts - cleanup on failure
+	var startErr error
+	defer func() {
+		if startErr != nil {
+			d.logger.Warn("cleaning up container after start failure", "container_id", containerID, "error", startErr)
+			_ = d.client.Stop(d.ctx, containerID)
+			_ = d.client.Remove(d.ctx, containerID)
+		}
+	}()
 
 	// Get container network info for service registration
 	var driverNetwork *drivers.DriverNetwork
@@ -224,11 +246,11 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 		for _, portMapping := range taskConfig.Ports {
 			parts := strings.Split(portMapping, ":")
 			if len(parts) != 2 {
-				d.logger.Warn("invalid port mapping format, expected containerPort:hostPort", "mapping", portMapping)
+				d.logger.Warn("invalid port mapping format, expected hostPort:containerPort", "mapping", portMapping)
 				continue
 			}
-			containerPort := parts[0]
-			hostPort := parts[1]
+			hostPort := parts[0]
+			containerPort := parts[1]
 
 			listenAddr := fmt.Sprintf("0.0.0.0:%s", hostPort)
 			targetAddr := fmt.Sprintf("%s:%s", containerIP, containerPort)
@@ -243,19 +265,33 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 		}
 	}
 
-	// Build DriverNetwork with Tailscale hostname if available
-	if tailscale.Running && tailscale.DNSName != "" {
-		// Use Tailscale MagicDNS name for cross-node communication
-		driverNetwork = &drivers.DriverNetwork{
-			IP:            tailscale.DNSName,
-			AutoAdvertise: true,
+	// Build PortMap from Nomad allocated ports
+	// cfg.Resources.Ports contains the allocated port mappings for this task
+	portMap := make(map[string]int)
+	if cfg.Resources.Ports != nil {
+		for _, port := range *cfg.Resources.Ports {
+			portMap[port.Label] = port.Value
 		}
-		d.logger.Info("using tailscale for service registration", "dns_name", tailscale.DNSName)
+	}
+	if len(portMap) > 0 {
+		d.logger.Info("built port map for driver network", "portmap", portMap)
+	}
+
+	// Build DriverNetwork with Tailscale IP if available
+	if tailscale.Running && tailscale.IP != "" {
+		// Use Tailscale IP for service registration (health checks need IP, not DNS)
+		driverNetwork = &drivers.DriverNetwork{
+			IP:            tailscale.IP,
+			AutoAdvertise: true,
+			PortMap:       portMap,
+		}
+		d.logger.Info("using tailscale for service registration", "ip", tailscale.IP, "dns_name", tailscale.DNSName)
 	} else if containerIP != "" {
 		// Fall back to container IP (local-only access)
 		driverNetwork = &drivers.DriverNetwork{
 			IP:            containerIP,
 			AutoAdvertise: true,
+			PortMap:       portMap,
 		}
 	}
 
@@ -278,7 +314,8 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 	taskHandle.Config = cfg
 
 	if err := taskHandle.SetDriverState(&taskState); err != nil {
-		return nil, nil, fmt.Errorf("failed to set driver state: %w", err)
+		startErr = fmt.Errorf("failed to set driver state: %w", err)
+		return nil, nil, startErr
 	}
 
 	return taskHandle, driverNetwork, nil
@@ -487,6 +524,32 @@ func (d *Driver) ExecTask(taskID string, cmd []string, timeout time.Duration) (*
 	}
 
 	return result, nil
+}
+
+// ExecTaskStreaming runs an interactive command in a task with streaming I/O
+func (d *Driver) ExecTaskStreaming(ctx context.Context, taskID string, opts *drivers.ExecOptions) (*drivers.ExitResult, error) {
+	d.tasksLock.RLock()
+	handle, ok := d.tasks[taskID]
+	d.tasksLock.RUnlock()
+
+	if !ok {
+		return nil, fmt.Errorf("task %s not found", taskID)
+	}
+
+	d.logger.Debug("exec streaming", "task_id", taskID, "container_id", handle.containerID, "command", opts.Command)
+
+	err := d.client.ExecInteractive(ctx, handle.containerID, opts.Command, opts.Stdin, opts.Stdout, opts.Stderr)
+
+	if err != nil {
+		return &drivers.ExitResult{
+			ExitCode: 1,
+			Err:      err,
+		}, nil
+	}
+
+	return &drivers.ExitResult{
+		ExitCode: 0,
+	}, nil
 }
 
 // Shutdown cleans up the driver
