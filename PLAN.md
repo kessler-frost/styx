@@ -95,8 +95,8 @@ No additional TLS or gossip encryption needed when all nodes are on the same Tai
   - Nomad API client for job deployment
   - Service registry with Deploy/Stop/Status functions
 - [x] Auto-deploy platform services on `styx init --serve`
-  - NATS (message queue) at port 14222
-  - Dragonfly (Redis-compatible cache) at port 16379
+  - NATS (message queue) at port 4222 (standard)
+  - Dragonfly (Redis-compatible cache) at port 6379 (standard)
 - [x] `styx services` command
   - `styx services` - list platform services with status
   - `styx services start <name>` - start a service
@@ -116,7 +116,7 @@ No additional TLS or gossip encryption needed when all nodes are on the same Tai
 - [x] TLS termination (via Tailscale Serve)
 - [x] Load balancing across replicas (Traefik auto-discovers)
 
-**Note**: Traefik runs on port 10080, Tailscale Serve forwards HTTPS:443 to it.
+**Note**: Traefik runs on port 4200, Tailscale Serve forwards HTTPS:443 to it.
 Path-based routing by default: services at `https://hostname.ts.net/<service-name>`.
 
 **Deliverable**: External requests routed to correct service (COMPLETE)
@@ -205,14 +205,13 @@ Removed Consul, TLS certificates, and gossip encryption in favor of simpler arch
 ### Phase 3 Notes (Simplified)
 
 - Services use `provider = "nomad"` for Nomad native service discovery
-- Services accessible via Tailscale hostname + port (e.g., `hostname.ts.net:10080`)
-- Port convention: hostPort = containerPort + 10000 (e.g., 80 → 10080)
+- Services accessible via Tailscale hostname + port
+- Platform services use standard ports (NATS: 4222, Dragonfly: 6379, Traefik: 4200)
 
 ### Phase 4 Discoveries
 
 - Subnet collision problem: all Macs use same 192.168.64.0/24 vmnet subnet, so direct LAN routing won't work
 - Solution: Container network + native `-p` port mapping (no custom TCP proxy needed)
-- Port mapping convention: hostPort = containerPort + 10000 (e.g., 80 → 10080)
 - Task driver returns Tailscale MagicDNS hostname (e.g., `fimbulwinter.panthera-frog.ts.net`) in DriverNetwork
 - Services registered with Tailscale hostname, accessible from any node on the tailnet
 
@@ -226,8 +225,8 @@ All containers run on a shared `styx` network (192.168.200.0/24):
 
 **Port exposure:**
 - Services needing external access use `-p` flag (exposes on host + Tailscale IP)
-- Traefik is only service requiring host port (10080) for ingress
-- Platform services (NATS, Dragonfly) keep `-p` for cross-node + CLI access
+- Traefik requires host port (4200) for ingress
+- Platform services use standard ports: NATS (4222), Dragonfly (6379)
 - Backend services behind Traefik don't need `-p`
 
 **Removed**: `internal/proxy/` package - native `-p` flag handles port forwarding
@@ -251,7 +250,7 @@ All containers run on a shared `styx` network (192.168.200.0/24):
 **Discoveries:**
 - **Olric doesn't support ARM64** - Docker images are linux/amd64 only. Replaced with Dragonfly (Redis-compatible)
 - **Dragonfly requires explicit memory config** - Must pass `--maxmemory=1gb` to prevent reading system memory
-- **NATS works well** - Simple deployment, HTTP monitoring at port 18222
+- **NATS works well** - Simple deployment, HTTP monitoring at port 8222
 
 #### S3-Compatible Storage (Deferred)
 
@@ -266,13 +265,13 @@ Recommendation: Use cloud object storage (S3, GCS, R2) if needed.
 
 **Architecture**: Traefik + Tailscale Serve for ingress
 
-- Traefik runs as platform service on port 10080 (HTTP) and 18080 (dashboard)
-- Tailscale Serve forwards HTTPS:443 → localhost:10080 with auto TLS
+- Traefik runs as platform service on port 4200 (HTTP) and 4201 (dashboard)
+- Tailscale Serve forwards HTTPS:443 → localhost:4200 with auto TLS
 - Path-based routing by default: `PathPrefix(/{{ .Name }})`
 - Services accessible at `https://hostname.ts.net/<service-name>`
 
 **Key Decisions:**
-- **No sudo required**: Using high ports + Tailscale Serve instead of binding to 80/443
+- **No sudo required**: Using port 4200 + Tailscale Serve instead of binding to 80/443
 - **Path-based routing**: Host-based subdomains (`nginx.hostname.ts.net`) not supported by Tailscale MagicDNS
 - **Dynamic HCL**: Traefik needs Tailscale IP at deploy time to reach Nomad API from container
 

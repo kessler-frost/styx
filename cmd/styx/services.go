@@ -62,15 +62,15 @@ func runServicesList(cmd *cobra.Command, args []string) error {
 
 	fmt.Println()
 	fmt.Println("Endpoints (when running):")
-	fmt.Println("  NATS:      nats://localhost:14222")
-	fmt.Println("  Dragonfly: redis://localhost:16379")
+	fmt.Println("  NATS:      nats://localhost:4222")
+	fmt.Println("  Dragonfly: redis://localhost:6379")
 	tsInfo := network.GetTailscaleInfo()
 	if tsInfo.Running {
 		fmt.Printf("  Traefik:   https://%s (ingress)\n", tsInfo.DNSName)
 	} else {
-		fmt.Println("  Traefik:   http://localhost:10080 (ingress)")
+		fmt.Println("  Traefik:   http://localhost:4200 (ingress)")
 	}
-	fmt.Println("             http://localhost:18080 (dashboard)")
+	fmt.Println("             http://localhost:4201 (dashboard)")
 
 	return nil
 }

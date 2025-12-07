@@ -12,9 +12,9 @@ import (
 func main() {
 	ctx := context.Background()
 
-	// Connect to Dragonfly via Consul DNS or localhost
+	// Connect to Dragonfly (Redis-compatible) on standard port
 	client := redis.NewClient(&redis.Options{
-		Addr:     "localhost:16379",
+		Addr:     "localhost:6379",
 		Password: "",
 		DB:       0,
 	})

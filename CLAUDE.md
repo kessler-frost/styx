@@ -141,6 +141,7 @@ The user uses **mise** to install and manage package versions. When a tool needs
 - **Service Discovery**: Nomad native service discovery (`provider = "nomad"`)
 - **DNS**: Tailscale MagicDNS for hostname resolution
 
-**Port Convention**: Container ports are mapped to host ports at containerPort + 10000:
-- Container port 80 → Host port 10080
-- Container port 6379 → Host port 16379
+**Port Convention**: Platform services use standard ports where possible:
+- NATS: 4222 (client), 6222 (cluster), 8222 (monitor)
+- Dragonfly: 6379 (Redis-compatible)
+- Traefik: 4200 (HTTP ingress), 4201 (dashboard)

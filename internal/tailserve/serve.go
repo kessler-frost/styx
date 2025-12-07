@@ -34,7 +34,7 @@ func findTailscaleBinary() string {
 	return ""
 }
 
-// Enable sets up Tailscale Serve to forward HTTPS:443 to Traefik at localhost:10080.
+// Enable sets up Tailscale Serve to forward HTTPS:443 to Traefik at localhost:4200.
 // This provides automatic TLS termination via Tailscale.
 func Enable() error {
 	bin := findTailscaleBinary()
@@ -42,8 +42,8 @@ func Enable() error {
 		return fmt.Errorf("tailscale binary not found")
 	}
 
-	// Run: tailscale serve --bg / localhost:10080
-	cmd := exec.Command(bin, "serve", "--bg", "/", "localhost:10080")
+	// Run: tailscale serve --bg localhost:4200
+	cmd := exec.Command(bin, "serve", "--bg", "localhost:4200")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to enable tailscale serve: %w\nOutput: %s", err, string(output))

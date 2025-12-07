@@ -13,13 +13,13 @@ const natsJobHCL = `job "nats" {
 
     network {
       port "client" {
-        static = 14222
+        static = 4222
       }
       port "cluster" {
-        static = 16222
+        static = 6222
       }
       port "monitor" {
-        static = 18222
+        static = 8222
       }
     }
 
@@ -29,7 +29,7 @@ const natsJobHCL = `job "nats" {
       config {
         image   = "nats:latest"
         network = "styx"
-        ports   = ["14222:4222", "16222:6222", "18222:8222"]
+        ports   = ["4222:4222", "6222:6222", "8222:8222"]
         args    = [
           "-cluster", "nats://0.0.0.0:6222",
           "-http_port", "8222",
@@ -84,7 +84,7 @@ const dragonflyJobHCL = `job "dragonfly" {
 
     network {
       port "redis" {
-        static = 16379
+        static = 6379
       }
     }
 
@@ -94,7 +94,7 @@ const dragonflyJobHCL = `job "dragonfly" {
       config {
         image   = "docker.dragonflydb.io/dragonflydb/dragonfly:latest"
         network = "styx"
-        ports   = ["16379:6379"]
+        ports   = ["6379:6379"]
         args    = [
           "--bind", "0.0.0.0",
           "--port", "6379",
@@ -137,10 +137,10 @@ const traefikJobHCLTemplate = `job "traefik" {
 
     network {
       port "http" {
-        static = 10080
+        static = 4200
       }
       port "dashboard" {
-        static = 18080
+        static = 4201
       }
     }
 
@@ -150,8 +150,9 @@ const traefikJobHCLTemplate = `job "traefik" {
       config {
         image   = "traefik:v3.2"
         network = "styx"
-        ports   = ["10080:80", "18080:8080"]
+        ports   = ["4200:80", "4201:8080"]
         args    = [
+          "--log.level=DEBUG",
           "--entryPoints.http.address=:80",
           "--api.dashboard=true",
           "--api.insecure=true",

@@ -15,7 +15,7 @@ job "dragonfly" {
 
     network {
       port "redis" {
-        static = 16379  # Redis-compatible client connections
+        static = 6379  # Redis-compatible client connections (standard port)
       }
     }
 
@@ -25,7 +25,7 @@ job "dragonfly" {
       config {
         image   = "docker.dragonflydb.io/dragonflydb/dragonfly:latest"
         network = "styx"
-        ports   = ["16379:6379"]
+        ports   = ["6379:6379"]
         args    = [
           "--bind", "0.0.0.0",
           "--port", "6379",

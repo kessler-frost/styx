@@ -15,13 +15,13 @@ job "nats" {
 
     network {
       port "client" {
-        static = 14222  # NATS client connections
+        static = 4222  # NATS client connections (standard port)
       }
       port "cluster" {
-        static = 16222  # NATS cluster routing
+        static = 6222  # NATS cluster routing (standard port)
       }
       port "monitor" {
-        static = 18222  # HTTP monitoring
+        static = 8222  # HTTP monitoring (standard port)
       }
     }
 
@@ -31,7 +31,7 @@ job "nats" {
       config {
         image   = "nats:latest"
         network = "styx"
-        ports   = ["14222:4222", "16222:6222", "18222:8222"]
+        ports   = ["4222:4222", "6222:6222", "8222:8222"]
         # Note: For multi-node clustering, use Nomad template to resolve service addresses
         # or configure static routes via Tailscale hostnames
         args    = [

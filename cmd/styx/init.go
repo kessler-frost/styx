@@ -397,7 +397,7 @@ wait
 	fmt.Println("\nEnabling Tailscale Serve for HTTPS ingress...")
 	if err := tailserve.Enable(); err != nil {
 		fmt.Printf("  Warning: failed to enable Tailscale Serve: %v\n", err)
-		fmt.Println("  Traefik is still available at http://localhost:10080")
+		fmt.Println("  Traefik is still available at http://localhost:4200")
 	}
 
 	// Get Tailscale info for displaying ingress URL
@@ -405,14 +405,14 @@ wait
 
 	fmt.Println("\nStyx server started!")
 	fmt.Println("\nPlatform services:")
-	fmt.Println("  NATS:      nats://localhost:14222")
-	fmt.Println("  Dragonfly: redis://localhost:16379")
+	fmt.Println("  NATS:      nats://localhost:4222")
+	fmt.Println("  Dragonfly: redis://localhost:6379")
 	if tsInfo.Running {
 		fmt.Printf("  Traefik:   https://%s (ingress)\n", tsInfo.DNSName)
 	} else {
-		fmt.Println("  Traefik:   http://localhost:10080 (ingress)")
+		fmt.Println("  Traefik:   http://localhost:4200 (ingress)")
 	}
-	fmt.Println("             http://localhost:18080 (dashboard)")
+	fmt.Println("             http://localhost:4201 (dashboard)")
 	fmt.Println("\nTo add more nodes, run on other Macs:")
 	fmt.Println("  styx init")
 	fmt.Println("\nCheck status with:")

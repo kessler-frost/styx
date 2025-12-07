@@ -137,7 +137,7 @@ nomad service info nginx
 
 #### 3.3 Service Accessible
 ```bash
-curl http://localhost:10080
+curl http://localhost:4200
 # Expected: Returns nginx welcome page
 ```
 
@@ -175,19 +175,19 @@ styx stop && styx -y
 #### 4.2 TCP Proxy Running
 ```bash
 nomad job run example/nginx.nomad
-lsof -i :10080
-# Expected: Shows styx task driver listening on port 10080
+lsof -i :4200
+# Expected: Shows styx task driver listening on port 4200
 ```
 
 #### 4.3 Local Access via Proxy
 ```bash
-curl http://localhost:10080
+curl http://localhost:4200
 # Expected: Returns nginx welcome page
 ```
 
 #### 4.4 Access via Tailscale Hostname
 ```bash
-curl http://fimbulwinter.panthera-frog.ts.net:10080
+curl http://fimbulwinter.panthera-frog.ts.net:4200
 # Expected: Returns nginx welcome page (replace with your hostname)
 ```
 
@@ -212,36 +212,39 @@ nomad job run example/nginx.nomad
 
 # On Mac B: Join and access
 styx
-curl http://fimbulwinter.panthera-frog.ts.net:10080
+curl http://fimbulwinter.panthera-frog.ts.net:4200
 # Expected: Returns nginx welcome page
 ```
 
 ### Phase 4 Notes
 
-**Port Mapping Convention**:
-- Container port 80 → Host port 10080
-- Container port 443 → Host port 10443
-- Container port 8080 → Host port 18080
-- General rule: host_port = container_port + 10000
+**Port Convention**:
+Platform services use standard ports where possible:
+- NATS: 4222 (client), 6222 (cluster), 8222 (monitor)
+- Dragonfly: 6379 (Redis-compatible)
+- Traefik: 4200 (HTTP ingress), 4201 (dashboard)
+
+User services can use any available port.
 
 **Job Spec Format**:
 ```hcl
 network {
   port "http" {
-    static = 10080  # Host port
+    static = 8080  # Any available port
   }
 }
 
 task "myapp" {
   config {
-    ports = ["10080:80"]  # hostPort:containerPort
+    network = "styx"  # Required: shared container network
+    ports   = ["8080:80"]  # hostPort:containerPort
   }
   service {
     provider     = "nomad"    # Nomad native service discovery
     address_mode = "driver"   # Uses Tailscale hostname
     check {
       type = "tcp"
-      port = "http"  # Works via proxy
+      port = "http"
     }
   }
 }
@@ -339,8 +342,8 @@ nomad service list
 # Expected: Shows dragonfly service
 
 # Test Redis-compatible operations
-redis-cli -p 16379 SET test "hello"
-redis-cli -p 16379 GET test
+redis-cli -p 6379 SET test "hello"
+redis-cli -p 6379 GET test
 # Expected: Returns "hello"
 ```
 
@@ -351,7 +354,7 @@ nomad service list
 # Expected: Shows nats service
 
 # Check health endpoint
-curl http://localhost:18222/healthz
+curl http://localhost:8222/healthz
 # Expected: Returns ok
 ```
 
@@ -372,11 +375,11 @@ styx services
 # Expected: traefik shows [running]
 
 # Check Traefik dashboard
-curl http://localhost:18080/api/overview
+curl http://localhost:4201/api/overview
 # Expected: JSON response with Traefik stats
 
 # Health check
-curl http://localhost:18080/ping
+curl http://localhost:4201/ping
 # Expected: "OK"
 ```
 
@@ -384,7 +387,7 @@ curl http://localhost:18080/ping
 ```bash
 # Tailscale Serve should be enabled automatically
 tailscale serve status
-# Expected: Shows "/" -> http://127.0.0.1:10080
+# Expected: Shows "/" -> http://127.0.0.1:4200
 
 # Access via HTTPS (replace hostname with your Tailscale FQDN)
 curl https://$(tailscale status --json | jq -r '.Self.DNSName' | sed 's/\.$//')/
@@ -400,11 +403,11 @@ NOMAD_ADDR=https://127.0.0.1:4646 NOMAD_SKIP_VERIFY=true nomad job run example/n
 sleep 10
 
 # Check Traefik discovered it
-curl http://localhost:18080/api/http/routers
+curl http://localhost:4201/api/http/routers
 # Expected: Shows "nginx-web" router
 
 # Access via path prefix (via Traefik on local port)
-curl http://localhost:10080/nginx-web
+curl http://localhost:4200/nginx-web
 # Expected: nginx welcome page
 
 # Access via HTTPS (replace hostname with your Tailscale FQDN)
@@ -417,7 +420,7 @@ curl https://$HOSTNAME/nginx-web
 ```bash
 # The nginx-traefik example has explicit tags for Host-based routing
 # Access via Host header (localhost)
-curl -H "Host: nginx.local" http://localhost:10080
+curl -H "Host: nginx.local" http://localhost:4200
 # Expected: nginx welcome page
 ```
 
@@ -427,7 +430,7 @@ curl -H "Host: nginx.local" http://localhost:10080
 # Then redeploy and check Traefik sees both backends
 NOMAD_ADDR=https://127.0.0.1:4646 NOMAD_SKIP_VERIFY=true nomad job run example/nginx-traefik.nomad
 
-curl http://localhost:18080/api/http/services
+curl http://localhost:4201/api/http/services
 # Expected: nginx-web service shows 2 servers
 ```
 
