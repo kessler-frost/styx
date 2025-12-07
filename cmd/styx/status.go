@@ -60,7 +60,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	// Check if service is loaded
 	if !launchd.IsLoaded(label) {
 		fmt.Println("Service:     stopped")
-		fmt.Println("\nStyx is not running. Use 'styx init' or 'styx join' to start.")
+		fmt.Println("\nStyx is not running. Run 'styx' to start.")
 		return nil
 	}
 	fmt.Println("Service:     running")

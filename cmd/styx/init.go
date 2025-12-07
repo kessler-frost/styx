@@ -16,27 +16,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	serverMode bool
-)
-
-var initCmd = &cobra.Command{
-	Use:   "init",
-	Short: "Initialize Styx cluster",
-	Long: `Initialize a new Styx cluster node.
-
-Use --server to initialize as a server node that can coordinate the cluster.
-Without --server, initializes as a standalone client (use 'styx join' instead
-to join an existing cluster).`,
-	RunE: runInit,
-}
-
-func init() {
-	initCmd.Flags().BoolVar(&serverMode, "server", false, "Initialize as server node")
-	rootCmd.AddCommand(initCmd)
-}
+// runInit is called by runStyx when --server flag is set
+var _ = (*cobra.Command)(nil) // Keep cobra import for function signature
 
 func runInit(cmd *cobra.Command, args []string) error {
+	// runInit always runs in server mode (called via styx --server)
 	// Check if already running and healthy
 	if launchd.IsLoaded("com.styx.nomad") {
 		client := &http.Client{Timeout: 2 * time.Second}
@@ -120,29 +104,16 @@ func runInit(cmd *cobra.Command, args []string) error {
 		fmt.Printf("Warning: plugin not found at %s, assuming already installed\n", pluginSrc)
 	}
 
-	// Generate Nomad config
-	var configContent string
-	if serverMode {
-		fmt.Println("Generating server configuration...")
-		cfg := config.ServerConfig{
-			DataDir:         dataDir,
-			AdvertiseIP:     ip,
-			BootstrapExpect: 1,
-			PluginDir:       pluginDir,
-			CPUTotalCompute: config.GetCPUTotalCompute(),
-		}
-		configContent, err = config.GenerateServerConfig(cfg)
-	} else {
-		fmt.Println("Generating standalone client configuration...")
-		cfg := config.ClientConfig{
-			DataDir:         dataDir,
-			AdvertiseIP:     ip,
-			Servers:         []string{ip}, // Point to self for standalone
-			PluginDir:       pluginDir,
-			CPUTotalCompute: config.GetCPUTotalCompute(),
-		}
-		configContent, err = config.GenerateClientConfig(cfg)
+	// Generate Nomad server config
+	fmt.Println("Generating server configuration...")
+	cfg := config.ServerConfig{
+		DataDir:         dataDir,
+		AdvertiseIP:     ip,
+		BootstrapExpect: 1,
+		PluginDir:       pluginDir,
+		CPUTotalCompute: config.GetCPUTotalCompute(),
 	}
+	configContent, err := config.GenerateServerConfig(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to generate config: %w", err)
 	}
@@ -153,48 +124,40 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to write nomad config: %w", err)
 	}
 
-	// Generate Vault config (server mode only)
-	var vaultPath string
-	var vaultConfigPath string
-	if serverMode {
-		vaultPath, err = exec.LookPath("vault")
-		if err != nil {
-			return fmt.Errorf("vault not found in PATH. Please install vault first: brew install vault")
-		}
-		fmt.Printf("Found vault at: %s\n", vaultPath)
+	// Generate Vault config
+	vaultPath, err := exec.LookPath("vault")
+	if err != nil {
+		return fmt.Errorf("vault not found in PATH. Please install vault first: brew install vault")
+	}
+	fmt.Printf("Found vault at: %s\n", vaultPath)
 
-		// Generate unique node ID from hostname
-		hostname, _ := os.Hostname()
-		nodeID := hostname
-		if nodeID == "" {
-			nodeID = "node1"
-		}
-
-		fmt.Println("Generating Vault configuration (Raft storage)...")
-		vaultCfg := config.VaultConfig{
-			DataDir:     vaultDataDir,
-			NodeID:      nodeID,
-			AdvertiseIP: ip,
-		}
-		vaultConfigContent, err := config.GenerateVaultConfig(vaultCfg)
-		if err != nil {
-			return fmt.Errorf("failed to generate vault config: %w", err)
-		}
-
-		vaultConfigPath = filepath.Join(configDir, "vault.hcl")
-		fmt.Printf("Writing Vault config to: %s\n", vaultConfigPath)
-		if err := config.WriteConfig(vaultConfigPath, vaultConfigContent); err != nil {
-			return fmt.Errorf("failed to write vault config: %w", err)
-		}
+	// Generate unique node ID from hostname
+	hostname, _ := os.Hostname()
+	nodeID := hostname
+	if nodeID == "" {
+		nodeID = "node1"
 	}
 
-	// Create wrapper script that starts Vault (if server) and Nomad
-	wrapperPath := filepath.Join(configDir, "styx-agent.sh")
+	fmt.Println("Generating Vault configuration (Raft storage)...")
+	vaultCfg := config.VaultConfig{
+		DataDir:     vaultDataDir,
+		NodeID:      nodeID,
+		AdvertiseIP: ip,
+	}
+	vaultConfigContent, err := config.GenerateVaultConfig(vaultCfg)
+	if err != nil {
+		return fmt.Errorf("failed to generate vault config: %w", err)
+	}
 
-	var wrapperContent string
-	if serverMode {
-		// Server mode: includes Vault
-		wrapperContent = fmt.Sprintf(`#!/bin/bash
+	vaultConfigPath := filepath.Join(configDir, "vault.hcl")
+	fmt.Printf("Writing Vault config to: %s\n", vaultConfigPath)
+	if err := config.WriteConfig(vaultConfigPath, vaultConfigContent); err != nil {
+		return fmt.Errorf("failed to write vault config: %w", err)
+	}
+
+	// Create wrapper script that starts Vault and Nomad
+	wrapperPath := filepath.Join(configDir, "styx-agent.sh")
+	wrapperContent := fmt.Sprintf(`#!/bin/bash
 # Styx agent wrapper - starts Vault and Nomad
 set -e
 
@@ -228,28 +191,6 @@ NOMAD_PID=$!
 # Wait for either to exit
 wait
 `, vaultPath, vaultConfigPath, nomadPath, configDir)
-	} else {
-		// Client mode: only Nomad
-		wrapperContent = fmt.Sprintf(`#!/bin/bash
-# Styx agent wrapper - starts Nomad
-set -e
-
-cleanup() {
-    echo "Stopping services..."
-    kill $NOMAD_PID 2>/dev/null || true
-    exit 0
-}
-
-trap cleanup SIGTERM SIGINT
-
-# Start Nomad
-"%s" agent -config="%s/nomad.hcl" &
-NOMAD_PID=$!
-
-# Wait for exit
-wait
-`, nomadPath, configDir)
-	}
 
 	fmt.Printf("Writing wrapper script to: %s\n", wrapperPath)
 	if err := os.WriteFile(wrapperPath, []byte(wrapperContent), 0755); err != nil {
@@ -291,48 +232,46 @@ wait
 		return fmt.Errorf("failed to load service: %w", err)
 	}
 
-	// Initialize and unseal Vault (server mode only)
-	if serverMode {
-		fmt.Println("Waiting for Vault to become ready...")
-		if err := waitForVaultHealth(30 * time.Second); err != nil {
-			return fmt.Errorf("vault failed to start: %w\nCheck logs at %s", err, filepath.Join(logDir, "styx.log"))
-		}
+	// Initialize and unseal Vault
+	fmt.Println("Waiting for Vault to become ready...")
+	if err := waitForVaultHealth(30 * time.Second); err != nil {
+		return fmt.Errorf("vault failed to start: %w\nCheck logs at %s", err, filepath.Join(logDir, "styx.log"))
+	}
 
-		// Check if Vault needs initialization
-		initialized, err := vault.IsInitialized()
+	// Check if Vault needs initialization
+	initialized, err := vault.IsInitialized()
+	if err != nil {
+		return fmt.Errorf("failed to check vault status: %w", err)
+	}
+
+	if !initialized {
+		fmt.Println("Initializing Vault...")
+		_, err = vault.Initialize(secretsDir)
 		if err != nil {
-			return fmt.Errorf("failed to check vault status: %w", err)
+			return fmt.Errorf("failed to initialize vault: %w", err)
 		}
+	}
 
-		if !initialized {
-			fmt.Println("Initializing Vault...")
-			_, err = vault.Initialize(secretsDir)
-			if err != nil {
-				return fmt.Errorf("failed to initialize vault: %w", err)
-			}
+	// Unseal if sealed
+	sealed, _ := vault.IsSealed()
+	if sealed {
+		fmt.Println("Unsealing Vault...")
+		if err := vault.Unseal(secretsDir); err != nil {
+			return fmt.Errorf("failed to unseal vault: %w", err)
 		}
+	}
 
-		// Unseal if sealed
-		sealed, _ := vault.IsSealed()
-		if sealed {
-			fmt.Println("Unsealing Vault...")
-			if err := vault.Unseal(secretsDir); err != nil {
-				return fmt.Errorf("failed to unseal vault: %w", err)
-			}
-		}
+	// Wait for Vault to become active (leader elected)
+	fmt.Println("Waiting for Vault to become active...")
+	if err := waitForVaultActive(60 * time.Second); err != nil {
+		return fmt.Errorf("vault failed to become active: %w", err)
+	}
 
-		// Wait for Vault to become active (leader elected)
-		fmt.Println("Waiting for Vault to become active...")
-		if err := waitForVaultActive(60 * time.Second); err != nil {
-			return fmt.Errorf("vault failed to become active: %w", err)
-		}
-
-		// Setup Nomad integration with workload identities
-		fmt.Println("Setting up Vault-Nomad integration...")
-		if err := vault.SetupNomadIntegration(secretsDir); err != nil {
-			fmt.Printf("Warning: failed to setup Vault-Nomad integration: %v\n", err)
-			fmt.Println("You can set this up later with 'vault policy write' and 'vault token create'")
-		}
+	// Setup Nomad integration with workload identities
+	fmt.Println("Setting up Vault-Nomad integration...")
+	if err := vault.SetupNomadIntegration(secretsDir); err != nil {
+		fmt.Printf("Warning: failed to setup Vault-Nomad integration: %v\n", err)
+		fmt.Println("You can set this up later with 'vault policy write' and 'vault token create'")
 	}
 
 	// Wait for Nomad to become healthy
@@ -342,20 +281,16 @@ wait
 		return fmt.Errorf("nomad failed to start: %w\nCheck logs at %s", err, filepath.Join(logDir, "styx.log"))
 	}
 
-	fmt.Println("\nStyx initialized successfully!")
-	if serverMode {
-		fmt.Println("\nServer is running. To add client nodes, run on other Macs:")
-		fmt.Printf("  styx join %s\n", ip)
-	}
+	fmt.Println("\nStyx server started!")
+	fmt.Println("\nTo add more nodes, run on other Macs:")
+	fmt.Println("  styx")
 	fmt.Println("\nCheck status with:")
 	fmt.Println("  styx status           # Show Styx status")
 	fmt.Println("  nomad node status     # List Nomad nodes")
 	fmt.Println("  nomad service list    # List registered services")
-	if serverMode {
-		fmt.Println("  vault status          # Show Vault status")
-		fmt.Println("\nVault UI:  http://127.0.0.1:8200/ui")
-	}
-	fmt.Println("\nNomad UI:  http://127.0.0.1:4646")
+	fmt.Println("  vault status          # Show Vault status")
+	fmt.Println("\nVault UI:  http://127.0.0.1:8200/ui")
+	fmt.Println("Nomad UI:  http://127.0.0.1:4646")
 	fmt.Println("Transport encryption provided by Tailscale WireGuard")
 
 	return nil

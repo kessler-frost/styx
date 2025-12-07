@@ -1,6 +1,6 @@
 # Styx Implementation Plan
 
-> A distributed system platform for Mac fleets using Apple Containers + Nomad
+> Styx unites your Mac devices into a cohesive fleet for running workloads at any scale
 
 ## Status Legend
 - [ ] Not started
@@ -29,7 +29,7 @@
 - [x] Download/manage Nomad binary (prerequisite: `brew install nomad`)
 - [x] Generate Nomad server/client configs
 - [x] launchd service integration
-- [x] `styx init` / `styx join` commands
+- [x] `styx` / `styx -y` / `styx <ip>` commands
 - [x] Auto-discover servers via Tailscale (`styx` with no args)
   - Run `tailscale status` to get connected devices and IPs
   - Probe each IP for running Nomad server (port 4646)

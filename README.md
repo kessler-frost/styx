@@ -1,15 +1,15 @@
 # Styx
 
-A distributed system platform for Mac fleets using Apple Containers and HashiCorp Nomad.
+Styx unites your Mac devices into a cohesive fleet for running workloads at any scale.
 
 ## Overview
 
-Styx makes it easy to run distributed workloads across multiple Apple Silicon Macs. It combines:
+Styx combines Apple Containers with HashiCorp Nomad to turn any collection of Macs into unified infrastructure:
 
-- **Apple Containers** - Native macOS containerization (micro-VMs)
-- **Nomad** - Workload orchestration
-- **Consul** - Service discovery and configuration
-- **Tailscale** - Mesh networking
+- **Apple Containers** - Native macOS containerization (lightweight VMs)
+- **Nomad** - Workload orchestration and scheduling
+- **Vault** - Secrets management
+- **Tailscale** - Secure mesh networking
 
 ## Requirements
 

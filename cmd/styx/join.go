@@ -14,20 +14,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var joinCmd = &cobra.Command{
-	Use:   "join <server-ip>",
-	Short: "Join an existing Styx cluster",
-	Long: `Join an existing Styx cluster as a client node.
-
-The server-ip argument should be the IP address of an existing Styx server node.
-This node will register with the server and be available to run workloads.`,
-	Args: cobra.ExactArgs(1),
-	RunE: runJoin,
-}
-
-func init() {
-	rootCmd.AddCommand(joinCmd)
-}
+// runJoin is called by runStyx when a server IP is provided
+var _ = (*cobra.Command)(nil) // Keep cobra import for function signature
 
 func runJoin(cmd *cobra.Command, args []string) error {
 	serverIP := args[0]

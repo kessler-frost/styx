@@ -19,27 +19,39 @@ var (
 	logDir       string
 	secretsDir   string
 	vaultDataDir string
+
+	// Root command flags
+	autoYes bool
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "styx",
-	Short: "Distributed system platform for Mac fleets",
-	Long: `Styx is a distributed system platform that uses Apple Containers
-and HashiCorp Nomad to orchestrate workloads across Mac fleets.
+	Use:   "styx [server-ip]",
+	Short: "Unite your Macs into a fleet for any workload",
+	Long: `Styx unites your Mac devices into a cohesive fleet for running workloads at any scale using Apple Containers and HashiCorp Nomad.
 
-Running 'styx' with no arguments auto-discovers servers on your
-Tailscale network and joins one.
+  styx              Auto-discover and join a server on your Tailscale network
+  styx -y           Auto-start as server if no servers found (skip prompt)
+  styx <ip>         Join a server at the specified IP address
+  styx stop         Stop the Styx service`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: runStyx,
+}
 
-Manual options:
-  styx init --server   Start a server node
-  styx join <ip>       Join an existing cluster`,
-	RunE: runAutoDiscover,
+func runStyx(cmd *cobra.Command, args []string) error {
+	// If IP provided, join that server
+	if len(args) == 1 {
+		return runJoin(cmd, args)
+	}
+
+	// Otherwise auto-discover
+	return runAutoDiscover(cmd, args)
 }
 
 func init() {
 	home, _ := os.UserHomeDir()
 	styxBase := filepath.Join(home, ".styx")
 
+	rootCmd.Flags().BoolVarP(&autoYes, "yes", "y", false, "Auto-confirm prompts (start server if none found)")
 	rootCmd.PersistentFlags().StringVar(&dataDir, "data-dir", filepath.Join(styxBase, "nomad"), "Nomad data directory")
 	rootCmd.PersistentFlags().StringVar(&configDir, "config-dir", filepath.Join(styxBase, "config"), "Config directory")
 	rootCmd.PersistentFlags().StringVar(&pluginDir, "plugin-dir", filepath.Join(styxBase, "plugins"), "Plugin directory")

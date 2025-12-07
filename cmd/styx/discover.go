@@ -31,8 +31,8 @@ func runAutoDiscover(cmd *cobra.Command, args []string) error {
 		fmt.Println("  https://tailscale.com/download")
 		fmt.Println()
 		fmt.Println("Or use manual commands:")
-		fmt.Println("  styx init --server   Start a server on this machine")
-		fmt.Println("  styx join <ip>       Join an existing server")
+		fmt.Println("  styx -y         Start a server on this machine")
+		fmt.Println("  styx <ip>       Join an existing server")
 		return nil
 	}
 
@@ -41,21 +41,18 @@ func runAutoDiscover(cmd *cobra.Command, args []string) error {
 
 	servers := network.DiscoverNomadServers(3 * time.Second)
 
-	// No servers found - prompt to start one
+	// No servers found - prompt to start one (or auto-start with -y)
 	if len(servers) == 0 {
 		fmt.Println()
 		fmt.Println("No Nomad servers found on your Tailscale network.")
 		fmt.Println()
 
-		if promptYesNo("Start a server on this machine?") {
-			serverMode = true
+		if autoYes || promptYesNo("Start a server on this machine?") {
 			return runInit(nil, nil)
 		}
 
 		fmt.Println()
-		fmt.Println("Manual options:")
-		fmt.Println("  styx init --server   Start a server on this machine")
-		fmt.Println("  styx join <ip>       Join an existing server by IP")
+		fmt.Println("Run 'styx -y' to start a server on this machine.")
 		return nil
 	}
 

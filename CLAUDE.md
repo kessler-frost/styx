@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Styx is a distributed system platform for Mac fleets using Apple Containers and HashiCorp Nomad.
+Styx unites your Mac devices into a cohesive fleet for running workloads at any scale.
 
 **Target**: macOS 26+ with Apple Silicon
 
@@ -11,7 +11,7 @@ Styx is a distributed system platform for Mac fleets using Apple Containers and 
 - `PLAN.md` - Living implementation plan with phases and checkboxes
 - `TEST.md` - Testing requirements for each phase (run after completing a phase)
 - `driver/` - Nomad task driver for Apple Containers
-- `cmd/styx/` - Main CLI launcher (`styx init`, `styx join`, `styx stop`)
+- `cmd/styx/` - Main CLI launcher (`styx`, `styx -y`, `styx <ip>`, `styx stop`)
 - `internal/` - Internal packages (config, launchd, network, proxy, vault)
 - `example/` - Sample Nomad job specs for testing (alpine, nginx, ubuntu, nats, dragonfly)
 
@@ -22,8 +22,8 @@ styx/
 ├── cmd/styx/           # CLI commands
 │   ├── main.go         # Entry point
 │   ├── root.go         # Root command with global flags
-│   ├── init.go         # styx init --server
-│   ├── join.go         # styx join <server-ip>
+│   ├── init.go         # Server initialization logic
+│   ├── join.go         # Client join logic
 │   ├── stop.go         # styx stop
 │   └── version.go      # styx version
 ├── driver/             # Nomad task driver plugin

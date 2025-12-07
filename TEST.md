@@ -86,17 +86,17 @@ pkill -f "nomad agent"
 
 ### Test Cases
 
-#### 2.1 Styx Init (Server)
+#### 2.1 Styx Server
 ```bash
-styx init --server
+styx -y
 # Expected: Nomad server starts
 # Expected: `nomad server members` shows 1 member
 ```
 
-#### 2.2 Styx Join (Client)
+#### 2.2 Styx Join
 ```bash
-# On second Mac:
-styx join <server-ip>
+# On second Mac (auto-discovers server):
+styx
 # Expected: `nomad node status` shows 2 nodes
 ```
 
@@ -108,7 +108,7 @@ nomad job run example/alpine.nomad
 
 #### 2.4 launchd Integration
 ```bash
-styx init --server
+styx -y
 # Reboot Mac
 # Expected: Styx automatically starts via launchd
 ```
@@ -168,7 +168,7 @@ curl http://localhost:10080
 ```bash
 # Build and reinitialize styx
 make build-all
-styx stop && styx init --server
+styx stop && styx -y
 # Expected: Shows "Tailscale connected: <hostname>.ts.net (<ip>)"
 ```
 
@@ -206,12 +206,12 @@ nomad service info nginx
 
 #### 4.7 Cross-Node Communication
 ```bash
-# On Mac A (fimbulwinter): Start nginx
-styx init --server
+# On Mac A (fimbulwinter): Start server and nginx
+styx -y
 nomad job run example/nginx.nomad
 
 # On Mac B: Join and access
-styx join fimbulwinter.panthera-frog.ts.net
+styx
 curl http://fimbulwinter.panthera-frog.ts.net:10080
 # Expected: Returns nginx welcome page
 ```
@@ -259,7 +259,7 @@ task "myapp" {
 
 #### 5.1 Vault Running (Server Mode)
 ```bash
-styx stop && styx init --server
+styx stop && styx -y
 vault status
 # Expected: Shows initialized and unsealed
 # "Sealed: false"
