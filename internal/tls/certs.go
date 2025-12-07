@@ -40,14 +40,16 @@ func GenerateCA(certsDir string) error {
 }
 
 // GenerateServerCert generates a server certificate for Consul.
-// Existing certs are deleted and regenerated.
+// If a valid cert already exists, it is reused.
 func GenerateServerCert(certsDir, datacenter string) (*CertPaths, error) {
 	if err := os.MkdirAll(certsDir, 0700); err != nil {
 		return nil, fmt.Errorf("failed to create certs directory: %w", err)
 	}
 
-	// Delete existing server certs (allows reinit without manual cleanup)
-	deleteExistingCerts(certsDir, datacenter+"-server-consul")
+	// Check if server cert already exists
+	if existing, err := GetExistingCerts(certsDir, datacenter, true); err == nil {
+		return existing, nil
+	}
 
 	// Generate server certificate
 	cmd := exec.Command("consul", "tls", "cert", "create", "-server", "-dc", datacenter)
@@ -71,14 +73,16 @@ func GenerateServerCert(certsDir, datacenter string) (*CertPaths, error) {
 }
 
 // GenerateClientCert generates a client certificate for Consul.
-// Existing certs are deleted and regenerated.
+// If a valid cert already exists, it is reused.
 func GenerateClientCert(certsDir, datacenter string) (*CertPaths, error) {
 	if err := os.MkdirAll(certsDir, 0700); err != nil {
 		return nil, fmt.Errorf("failed to create certs directory: %w", err)
 	}
 
-	// Delete existing client certs (allows reinit without manual cleanup)
-	deleteExistingCerts(certsDir, datacenter+"-client-consul")
+	// Check if client cert already exists
+	if existing, err := GetExistingCerts(certsDir, datacenter, false); err == nil {
+		return existing, nil
+	}
 
 	// Generate client certificate
 	cmd := exec.Command("consul", "tls", "cert", "create", "-client", "-dc", datacenter)
@@ -133,6 +137,27 @@ func LoadGossipKey(secretsDir string) (string, error) {
 		return "", fmt.Errorf("failed to read gossip key: %w", err)
 	}
 	return strings.TrimSpace(string(data)), nil
+}
+
+// GetOrGenerateGossipKey loads an existing gossip key or generates a new one.
+func GetOrGenerateGossipKey(secretsDir string) (string, error) {
+	// Try to load existing key first
+	if key, err := LoadGossipKey(secretsDir); err == nil && key != "" {
+		return key, nil
+	}
+
+	// Generate new key
+	key, err := GenerateGossipKey()
+	if err != nil {
+		return "", err
+	}
+
+	// Save it
+	if err := SaveGossipKey(secretsDir, key); err != nil {
+		return "", err
+	}
+
+	return key, nil
 }
 
 // CopyCAFromServer copies the CA certificate from the server.
@@ -258,14 +283,16 @@ func GenerateNomadCA(certsDir string) error {
 }
 
 // GenerateNomadServerCert generates a server certificate for Nomad.
-// Existing certs are deleted and regenerated.
+// If a valid cert already exists, it is reused.
 func GenerateNomadServerCert(certsDir, region string) (*NomadCertPaths, error) {
 	if err := os.MkdirAll(certsDir, 0700); err != nil {
 		return nil, fmt.Errorf("failed to create certs directory: %w", err)
 	}
 
-	// Delete existing server certs (allows reinit without manual cleanup)
-	deleteExistingCerts(certsDir, region+"-server-nomad")
+	// Check if server cert already exists
+	if existing, err := GetExistingNomadCerts(certsDir, region, true); err == nil {
+		return existing, nil
+	}
 
 	// Generate server certificate
 	cmd := exec.Command("nomad", "tls", "cert", "create", "-server", "-region", region)
@@ -289,14 +316,16 @@ func GenerateNomadServerCert(certsDir, region string) (*NomadCertPaths, error) {
 }
 
 // GenerateNomadClientCert generates a client certificate for Nomad.
-// Existing certs are deleted and regenerated.
+// If a valid cert already exists, it is reused.
 func GenerateNomadClientCert(certsDir, region string) (*NomadCertPaths, error) {
 	if err := os.MkdirAll(certsDir, 0700); err != nil {
 		return nil, fmt.Errorf("failed to create certs directory: %w", err)
 	}
 
-	// Delete existing client certs (allows reinit without manual cleanup)
-	deleteExistingCerts(certsDir, region+"-client-nomad")
+	// Check if client cert already exists
+	if existing, err := GetExistingNomadCerts(certsDir, region, false); err == nil {
+		return existing, nil
+	}
 
 	// Generate client certificate
 	cmd := exec.Command("nomad", "tls", "cert", "create", "-client", "-region", region)

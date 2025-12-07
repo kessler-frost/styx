@@ -152,13 +152,10 @@ func runInit(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("failed to generate Consul server cert: %w", err)
 		}
 
-		fmt.Println("Generating gossip encryption key...")
-		gossipKey, err = tls.GenerateGossipKey()
+		fmt.Println("Loading or generating gossip encryption key...")
+		gossipKey, err = tls.GetOrGenerateGossipKey(secretsDir)
 		if err != nil {
-			return fmt.Errorf("failed to generate gossip key: %w", err)
-		}
-		if err := tls.SaveGossipKey(secretsDir, gossipKey); err != nil {
-			return fmt.Errorf("failed to save gossip key: %w", err)
+			return fmt.Errorf("failed to get gossip key: %w", err)
 		}
 
 		// Generate Nomad CA and server cert (separate from Consul)
@@ -182,34 +179,22 @@ func runInit(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("failed to generate Nomad client cert: %w", err)
 		}
 	} else {
-		// Standalone client: generate client certs (reuse CAs if exist)
-		consulCertPaths, err = tls.GetExistingCerts(certsDir, datacenter, false)
+		// Standalone client: generate or reuse client certs
+		fmt.Println("Setting up Consul Certificate Authority...")
+		if err := tls.GenerateCA(certsDir); err != nil {
+			return fmt.Errorf("failed to generate Consul CA: %w", err)
+		}
+
+		fmt.Println("Setting up Consul client certificates...")
+		consulCertPaths, err = tls.GenerateClientCert(certsDir, datacenter)
 		if err != nil {
-			// No existing certs, generate new ones for standalone mode
-			fmt.Println("Generating Consul Certificate Authority...")
-			if err := tls.GenerateCA(certsDir); err != nil {
-				return fmt.Errorf("failed to generate Consul CA: %w", err)
-			}
+			return fmt.Errorf("failed to generate Consul client cert: %w", err)
+		}
 
-			fmt.Println("Generating Consul client certificates...")
-			consulCertPaths, err = tls.GenerateClientCert(certsDir, datacenter)
-			if err != nil {
-				return fmt.Errorf("failed to generate Consul client cert: %w", err)
-			}
-
-			fmt.Println("Generating gossip encryption key...")
-			gossipKey, err = tls.GenerateGossipKey()
-			if err != nil {
-				return fmt.Errorf("failed to generate gossip key: %w", err)
-			}
-			if err := tls.SaveGossipKey(secretsDir, gossipKey); err != nil {
-				return fmt.Errorf("failed to save gossip key: %w", err)
-			}
-		} else {
-			gossipKey, err = tls.LoadGossipKey(secretsDir)
-			if err != nil {
-				return fmt.Errorf("failed to load gossip key: %w", err)
-			}
+		fmt.Println("Loading or generating gossip encryption key...")
+		gossipKey, err = tls.GetOrGenerateGossipKey(secretsDir)
+		if err != nil {
+			return fmt.Errorf("failed to get gossip key: %w", err)
 		}
 
 		// Generate Nomad client certs
