@@ -64,6 +64,13 @@ styx/
 - TLS, Vault, and security features are always on
 - Breaking changes are acceptable - this is a development project
 
+### No Sudo
+
+- Styx must never require sudo to run
+- All data stored in user directories (`~/.styx/`)
+- Uses launchd user agents (not system daemons)
+- Consul DNS for `.service.consul` resolution requires manual sudo setup (optional, documented below)
+
 ### Prefer Modern Approaches
 
 When implementing features with HashiCorp tools (Nomad, Consul, Vault), always use the latest/modern approaches:
@@ -130,3 +137,17 @@ The user uses **mise** to install and manage package versions. When a tool needs
 2. Mark all phase tasks as `[x]` in PLAN.md
 3. Add checkmark to phase header in PLAN.md (e.g., `## Phase 1: Foundation ✓`)
 4. Commit changes
+
+### Optional: Consul DNS for .service.consul Resolution
+
+By default, `.service.consul` names are only resolvable via direct Consul DNS queries (`dig @127.0.0.1 -p 8600`).
+For system-wide resolution (so apps can use `curl http://nginx.service.consul`), users must manually set up:
+
+```bash
+sudo mkdir -p /etc/resolver
+sudo tee /etc/resolver/consul <<< "nameserver 127.0.0.1
+port 8600"
+```
+
+This is optional - services work fine via Tailscale IPs without it. Health checks and service-to-service
+communication use direct Consul DNS queries and don't require this setup.

@@ -157,9 +157,9 @@ func runJoin(cmd *cobra.Command, args []string) error {
 	if _, err := os.Stat(caFile); os.IsNotExist(err) {
 		fmt.Println("\n⚠️  TLS certificates required!")
 		fmt.Println("Copy the following files from the server to this machine:")
-		fmt.Printf("  Server: ~/Library/Application Support/styx/certs/consul-agent-ca.pem\n")
+		fmt.Printf("  Server: ~/.styx/certs/consul-agent-ca.pem\n")
 		fmt.Printf("      To: %s\n", caFile)
-		fmt.Printf("  Server: ~/Library/Application Support/styx/secrets/gossip.key\n")
+		fmt.Printf("  Server: ~/.styx/secrets/gossip.key\n")
 		fmt.Printf("      To: %s/gossip.key\n", secretsDir)
 		fmt.Println("\nThen run 'styx join' again.")
 		return fmt.Errorf("CA certificate not found - copy from server first")
@@ -170,7 +170,7 @@ func runJoin(cmd *cobra.Command, args []string) error {
 	if _, err := os.Stat(gossipKeyFile); os.IsNotExist(err) {
 		fmt.Println("\n⚠️  Gossip key required!")
 		fmt.Println("Copy the gossip key from the server:")
-		fmt.Printf("  Server: ~/Library/Application Support/styx/secrets/gossip.key\n")
+		fmt.Printf("  Server: ~/.styx/secrets/gossip.key\n")
 		fmt.Printf("      To: %s\n", gossipKeyFile)
 		fmt.Println("\nThen run 'styx join' again.")
 		return fmt.Errorf("gossip key not found - copy from server first")

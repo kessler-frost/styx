@@ -35,12 +35,12 @@ to join an existing cluster as a client node.`,
 
 func init() {
 	home, _ := os.UserHomeDir()
-	styxBase := filepath.Join(home, "Library", "Application Support", "styx")
+	styxBase := filepath.Join(home, ".styx")
 
 	rootCmd.PersistentFlags().StringVar(&dataDir, "data-dir", filepath.Join(styxBase, "nomad"), "Nomad data directory")
 	rootCmd.PersistentFlags().StringVar(&configDir, "config-dir", filepath.Join(styxBase, "config"), "Config directory")
 	rootCmd.PersistentFlags().StringVar(&pluginDir, "plugin-dir", filepath.Join(styxBase, "plugins"), "Plugin directory")
-	rootCmd.PersistentFlags().StringVar(&logDir, "log-dir", filepath.Join(home, "Library", "Logs", "styx"), "Log directory")
+	rootCmd.PersistentFlags().StringVar(&logDir, "log-dir", filepath.Join(styxBase, "logs"), "Log directory")
 	rootCmd.PersistentFlags().StringVar(&consulDataDir, "consul-data-dir", filepath.Join(styxBase, "consul"), "Consul data directory")
 	rootCmd.PersistentFlags().StringVar(&certsDir, "certs-dir", filepath.Join(styxBase, "certs"), "TLS certificates directory")
 	rootCmd.PersistentFlags().StringVar(&secretsDir, "secrets-dir", filepath.Join(styxBase, "secrets"), "Secrets directory")

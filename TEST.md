@@ -300,14 +300,14 @@ consul info | grep encrypt
 # Expected: Shows "encrypt = true"
 
 # Key file exists
-ls ~/Library/Application\ Support/styx/secrets/gossip.key
+ls ~/.styx/secrets/gossip.key
 # Expected: File exists
 ```
 
 #### 5.3 Certificate Generation ✓
 ```bash
 # Check certificates exist
-ls ~/Library/Application\ Support/styx/certs/
+ls ~/.styx/certs/
 # Expected: consul-agent-ca.pem, dc1-server-consul-*.pem, dc1-server-consul-*-key.pem
 ```
 
@@ -318,7 +318,7 @@ vault status
 # "Sealed: false"
 
 # Root token saved
-cat ~/Library/Application\ Support/styx/secrets/vault-init.json
+cat ~/.styx/secrets/vault-init.json
 # Expected: Contains unseal_keys_b64 and root_token
 ```
 
@@ -328,7 +328,7 @@ cat ~/Library/Application\ Support/styx/secrets/vault-init.json
 export VAULT_ADDR=http://127.0.0.1:8200
 
 # Login with root token (for testing)
-export VAULT_TOKEN=$(cat ~/Library/Application\ Support/styx/secrets/vault-init.json | jq -r '.root_token')
+export VAULT_TOKEN=$(cat ~/.styx/secrets/vault-init.json | jq -r '.root_token')
 
 # Store a secret
 vault kv put secret/nginx api_key=test123 db_password=secret456
@@ -342,7 +342,7 @@ vault kv get secret/nginx
 #### 5.6 Nomad-Vault Integration ✓
 ```bash
 # Verify Nomad token exists
-cat ~/Library/Application\ Support/styx/secrets/nomad-vault-token
+cat ~/.styx/secrets/nomad-vault-token
 # Expected: Shows Vault token for Nomad
 
 # Policy exists
@@ -354,7 +354,7 @@ vault policy read nomad-server
 ```bash
 # First create the secret
 export VAULT_ADDR=http://127.0.0.1:8200
-export VAULT_TOKEN=$(cat ~/Library/Application\ Support/styx/secrets/vault-init.json | jq -r '.root_token')
+export VAULT_TOKEN=$(cat ~/.styx/secrets/vault-init.json | jq -r '.root_token')
 vault kv put secret/nginx api_key=test123 db_password=secret456
 
 # Run job that uses Vault secrets
@@ -372,8 +372,8 @@ nomad alloc logs <alloc-id>
 styx stop && styx init --server
 
 # Copy CA and gossip key to client (Mac B)
-scp ~/Library/Application\ Support/styx/certs/consul-agent-ca.pem macb:~/Library/Application\ Support/styx/certs/
-scp ~/Library/Application\ Support/styx/secrets/gossip.key macb:~/Library/Application\ Support/styx/secrets/
+scp ~/.styx/certs/consul-agent-ca.pem macb:~/.styx/certs/
+scp ~/.styx/secrets/gossip.key macb:~/.styx/secrets/
 
 # On client (Mac B)
 styx join <server-tailscale-ip>

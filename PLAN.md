@@ -164,6 +164,10 @@ Tailscale provides encrypted transport between nodes. Consul intentions can be u
 
 ## Notes
 
+### Design Principles
+
+- **No Sudo**: Styx never requires sudo. All data in `~/Library/Application Support/styx/`, uses launchd user agents. Features requiring sudo (like Consul DNS resolver) are optional and documented for manual setup.
+
 ### Phase 3 Discoveries
 
 - Apple Containers get IPv4 addresses on the 192.168.64.x subnet (vmnet)
@@ -172,7 +176,7 @@ Tailscale provides encrypted transport between nodes. Consul intentions can be u
 - The task driver must return `DriverNetwork` with the container's IP for proper service registration
 - Services must use `address_mode = "driver"` and be defined inside the task block
 - Health checks will fail until Phase 4 networking because localhost can't reach containers
-- DNS resolver for .consul domain requires `/etc/resolver/consul` with nameserver 127.0.0.1 port 8600
+- **Consul DNS**: Direct queries work (`dig @127.0.0.1 -p 8600 nginx.service.consul`), but system-wide `.service.consul` resolution requires manual sudo setup of `/etc/resolver/consul` - this is optional since services are accessible via Tailscale IPs
 
 ### Phase 4 Discoveries
 
