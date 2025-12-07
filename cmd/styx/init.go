@@ -326,17 +326,21 @@ func runInit(cmd *cobra.Command, args []string) error {
 	wrapperPath := filepath.Join(configDir, "styx-agent.sh")
 	consulConfigFile := filepath.Join(configDir, "consul.hcl")
 
+	// Get styx binary path for bootstrap server
+	styxPath, _ := os.Executable()
+
 	var wrapperContent string
 	if serverMode {
-		// Server mode: includes Vault
+		// Server mode: includes Vault and Bootstrap server
 		wrapperContent = fmt.Sprintf(`#!/bin/bash
-# Styx agent wrapper - starts Consul, Vault, and Nomad
+# Styx agent wrapper - starts Consul, Vault, Nomad, and Bootstrap server
 set -e
 
 cleanup() {
     echo "Stopping services..."
     kill $NOMAD_PID 2>/dev/null || true
     kill $VAULT_PID 2>/dev/null || true
+    kill $BOOTSTRAP_PID 2>/dev/null || true
     kill $CONSUL_PID 2>/dev/null || true
     exit 0
 }
@@ -356,6 +360,10 @@ for i in {1..30}; do
     fi
     sleep 1
 done
+
+# Start Bootstrap server for client discovery
+"%s" bootstrap-server &
+BOOTSTRAP_PID=$!
 
 # Start Vault
 "%s" server -config="%s" &
@@ -377,7 +385,7 @@ NOMAD_PID=$!
 
 # Wait for either to exit
 wait
-`, consulPath, consulConfigFile, vaultPath, vaultConfigPath, nomadPath, configDir)
+`, consulPath, consulConfigFile, styxPath, vaultPath, vaultConfigPath, nomadPath, configDir)
 	} else {
 		// Client mode: no Vault
 		wrapperContent = fmt.Sprintf(`#!/bin/bash

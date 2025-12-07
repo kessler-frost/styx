@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kessler-frost/styx/internal/bootstrap"
 	"github.com/kessler-frost/styx/internal/launchd"
 	"github.com/kessler-frost/styx/internal/network"
 	"github.com/spf13/cobra"
@@ -63,9 +64,7 @@ func runAutoDiscover(cmd *cobra.Command, args []string) error {
 	if len(servers) == 1 {
 		server := servers[0]
 		fmt.Printf("\nFound server: %s (%s)\n", server.Hostname, server.IP)
-		fmt.Println("Joining cluster...")
-		fmt.Println()
-		return runJoin(nil, []string{server.IP})
+		return joinWithBootstrap(server)
 	}
 
 	// Multiple servers found - prompt for selection
@@ -81,8 +80,35 @@ func runAutoDiscover(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	server := servers[selected]
-	fmt.Printf("Joining %s...\n", server.Hostname)
+	return joinWithBootstrap(servers[selected])
+}
+
+func joinWithBootstrap(server network.NomadServer) error {
+	// Create directories first (needed to save bootstrap files)
+	if err := os.MkdirAll(certsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create certs directory: %w", err)
+	}
+	if err := os.MkdirAll(secretsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create secrets directory: %w", err)
+	}
+
+	// Try to fetch bootstrap files from server
+	fmt.Printf("Fetching credentials from %s...\n", server.Hostname)
+	if bootstrap.CheckBootstrapServer(server.IP) {
+		if err := bootstrap.FetchBootstrapFiles(server.IP, certsDir, secretsDir); err != nil {
+			fmt.Printf("Warning: failed to fetch bootstrap files: %v\n", err)
+			fmt.Println("You may need to manually copy certificates from the server.")
+		} else {
+			fmt.Println("Credentials received successfully")
+		}
+	} else {
+		fmt.Println("Bootstrap server not available - credentials must be copied manually")
+		fmt.Println("Copy from server:")
+		fmt.Printf("  ~/.styx/certs/consul-agent-ca.pem → %s/consul-agent-ca.pem\n", certsDir)
+		fmt.Printf("  ~/.styx/secrets/gossip.key → %s/gossip.key\n", secretsDir)
+	}
+
+	fmt.Println("Joining cluster...")
 	fmt.Println()
 	return runJoin(nil, []string{server.IP})
 }

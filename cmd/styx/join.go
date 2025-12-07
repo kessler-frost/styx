@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"net/http"
 	"os"
@@ -282,15 +281,6 @@ wait
 		return fmt.Errorf("failed to write wrapper script: %w", err)
 	}
 
-	// Setup DNS resolver for .consul domain (requires sudo)
-	fmt.Println("Setting up DNS resolver for .consul domain...")
-	if err := setupConsulDNSJoin(); err != nil {
-		fmt.Printf("Warning: failed to setup DNS resolver: %v\n", err)
-		fmt.Println("You can manually create /etc/resolver/consul with:")
-		fmt.Println("  nameserver 127.0.0.1")
-		fmt.Println("  port 8600")
-	}
-
 	// Generate and write launchd plist (user agent)
 	home, _ := os.UserHomeDir()
 	plistPath := filepath.Join(home, "Library", "LaunchAgents", "com.styx.nomad.plist")
@@ -373,23 +363,3 @@ func waitForConsulHealthJoin(timeout time.Duration) error {
 	return fmt.Errorf("timeout waiting for consul health")
 }
 
-func setupConsulDNSJoin() error {
-	// Create /etc/resolver directory if it doesn't exist
-	// Then create /etc/resolver/consul with DNS config
-	resolverContent := "nameserver 127.0.0.1\nport 8600\n"
-
-	// Use sudo to write to /etc/resolver/consul
-	cmd := exec.Command("sudo", "mkdir", "-p", "/etc/resolver")
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to create /etc/resolver: %w", err)
-	}
-
-	cmd = exec.Command("sudo", "tee", "/etc/resolver/consul")
-	cmd.Stdin = bytes.NewBufferString(resolverContent)
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to write /etc/resolver/consul: %w", err)
-	}
-
-	fmt.Println("DNS resolver configured for .consul domain")
-	return nil
-}
