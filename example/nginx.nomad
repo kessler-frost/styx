@@ -15,8 +15,9 @@ job "nginx" {
       driver = "apple-container"
 
       config {
-        image = "nginx:latest"
-        ports = ["10080:80"]  # hostPort:containerPort
+        image   = "nginx:latest"
+        network = "styx"
+        ports   = ["10080:80"]  # hostPort:containerPort
       }
 
       resources {

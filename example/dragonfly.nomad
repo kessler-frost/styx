@@ -23,9 +23,10 @@ job "dragonfly" {
       driver = "apple-container"
 
       config {
-        image = "docker.dragonflydb.io/dragonflydb/dragonfly:latest"
-        ports = ["16379:6379"]
-        args  = [
+        image   = "docker.dragonflydb.io/dragonflydb/dragonfly:latest"
+        network = "styx"
+        ports   = ["16379:6379"]
+        args    = [
           "--bind", "0.0.0.0",
           "--port", "6379",
           "--maxmemory", "1gb",

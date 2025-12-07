@@ -38,8 +38,9 @@ job "nginx-vault" {
       }
 
       config {
-        image = "docker.io/library/nginx:alpine"
-        ports = ["10082:80"]
+        image   = "docker.io/library/nginx:alpine"
+        network = "styx"
+        ports   = ["10082:80"]
       }
 
       # Template that injects Vault secrets as environment variables

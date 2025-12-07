@@ -359,20 +359,81 @@ curl http://localhost:18222/healthz
 
 ## Phase 7: Ingress
 
+### Prerequisites
+- Styx server running with `styx init --serve`
+- Tailscale connected (for HTTPS ingress)
+
 ### Test Cases
 
-#### 7.1 Traefik Running
+#### 7.1 Traefik Platform Service
 ```bash
-nomad job run jobs/traefik.nomad
-curl http://localhost/
-# Expected: Traefik dashboard or routed service
+# Traefik is auto-deployed with other platform services
+styx services
+# Expected: traefik shows [running]
+
+# Check Traefik dashboard
+curl http://localhost:18080/api/overview
+# Expected: JSON response with Traefik stats
+
+# Health check
+curl http://localhost:18080/ping
+# Expected: "OK"
 ```
 
-#### 7.2 Auto-Discovery
+#### 7.2 Tailscale Serve
 ```bash
-nomad job run example/nginx.nomad
-curl http://nginx.localhost/
-# Expected: Returns nginx welcome page
+# Tailscale Serve should be enabled automatically
+tailscale serve status
+# Expected: Shows "/" -> http://127.0.0.1:10080
+
+# Access via HTTPS (replace hostname with your Tailscale FQDN)
+curl https://$(tailscale status --json | jq -r '.Self.DNSName' | sed 's/\.$//')/
+# Expected: 404 (no services routed to /)
+```
+
+#### 7.3 Auto-Discovery (Path-Based Routing)
+```bash
+# Deploy nginx-traefik example
+NOMAD_ADDR=https://127.0.0.1:4646 NOMAD_SKIP_VERIFY=true nomad job run example/nginx-traefik.nomad
+
+# Wait for service to register
+sleep 10
+
+# Check Traefik discovered it
+curl http://localhost:18080/api/http/routers
+# Expected: Shows "nginx-web" router
+
+# Access via path prefix (via Traefik on local port)
+curl http://localhost:10080/nginx-web
+# Expected: nginx welcome page
+
+# Access via HTTPS (replace hostname with your Tailscale FQDN)
+HOSTNAME=$(tailscale status --json | jq -r '.Self.DNSName' | sed 's/\.$//')
+curl https://$HOSTNAME/nginx-web
+# Expected: nginx welcome page
+```
+
+#### 7.4 Explicit Routing Tags
+```bash
+# The nginx-traefik example has explicit tags for Host-based routing
+# Access via Host header (localhost)
+curl -H "Host: nginx.local" http://localhost:10080
+# Expected: nginx welcome page
+```
+
+#### 7.5 Load Balancing (Multiple Instances)
+```bash
+# Edit nginx-traefik.nomad to set count = 2
+# Then redeploy and check Traefik sees both backends
+NOMAD_ADDR=https://127.0.0.1:4646 NOMAD_SKIP_VERIFY=true nomad job run example/nginx-traefik.nomad
+
+curl http://localhost:18080/api/http/services
+# Expected: nginx-web service shows 2 servers
+```
+
+#### 7.6 Cleanup
+```bash
+NOMAD_ADDR=https://127.0.0.1:4646 NOMAD_SKIP_VERIFY=true nomad job stop nginx-traefik
 ```
 
 ---

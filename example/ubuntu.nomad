@@ -10,6 +10,7 @@ job "ubuntu" {
 
       config {
         image   = "ubuntu:latest"
+        network = "styx"
         command = "sleep"
         args    = ["3600"]
       }

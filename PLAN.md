@@ -108,17 +108,18 @@ No additional TLS or gossip encryption needed when all nodes are on the same Tai
 
 ---
 
-## Phase 7: Ingress & Load Balancing
+## Phase 7: Ingress & Load Balancing ✓
 **Goal**: External traffic reaches services
 
-- [ ] Deploy Traefik as Nomad job
-- [ ] Nomad provider integration (reads from Nomad service catalog)
-- [ ] TLS termination
-- [ ] Load balancing across replicas
+- [x] Deploy Traefik as Nomad job (platform service)
+- [x] Nomad provider integration (reads from Nomad service catalog)
+- [x] TLS termination (via Tailscale Serve)
+- [x] Load balancing across replicas (Traefik auto-discovers)
 
-**Note**: Traefik will use Nomad provider directly (no Consul needed).
+**Note**: Traefik runs on port 10080, Tailscale Serve forwards HTTPS:443 to it.
+Path-based routing by default: services at `https://hostname.ts.net/<service-name>`.
 
-**Deliverable**: External requests routed to correct service
+**Deliverable**: External requests routed to correct service (COMPLETE)
 
 ---
 
@@ -170,8 +171,9 @@ No additional TLS or gossip encryption needed when all nodes are on the same Tai
 | Cache | Dragonfly | 6 |
 | Queue | NATS | 6 |
 | Storage | Deferred (see Notes) | 6 |
-| Ingress | Traefik (Nomad Provider) | 7 |
+| Ingress | Traefik + Tailscale Serve | 7 |
 | Load Balancing | Traefik | 7 |
+| TLS Termination | Tailscale Serve | 7 |
 | Logging | Loki | 8 |
 | Metrics | Prometheus | 8 |
 | Tracing | Jaeger (optional) | 8 |
@@ -209,10 +211,26 @@ Removed Consul, TLS certificates, and gossip encryption in favor of simpler arch
 ### Phase 4 Discoveries
 
 - Subnet collision problem: all Macs use same 192.168.64.0/24 vmnet subnet, so direct LAN routing won't work
-- Solution: TCP proxy in task driver bridges Tailscale → container network
+- Solution: Container network + native `-p` port mapping (no custom TCP proxy needed)
 - Port mapping convention: hostPort = containerPort + 10000 (e.g., 80 → 10080)
 - Task driver returns Tailscale MagicDNS hostname (e.g., `fimbulwinter.panthera-frog.ts.net`) in DriverNetwork
 - Services registered with Tailscale hostname, accessible from any node on the tailnet
+
+### Container Network Architecture (Dec 2025)
+
+All containers run on a shared `styx` network (192.168.200.0/24):
+- Created automatically on `styx init`
+- Enables direct container-to-container communication on same node
+- Multiple replicas work without port conflicts (each gets unique IP)
+- Traefik reaches backend services directly via container IP
+
+**Port exposure:**
+- Services needing external access use `-p` flag (exposes on host + Tailscale IP)
+- Traefik is only service requiring host port (10080) for ingress
+- Platform services (NATS, Dragonfly) keep `-p` for cross-node + CLI access
+- Backend services behind Traefik don't need `-p`
+
+**Removed**: `internal/proxy/` package - native `-p` flag handles port forwarding
 
 ### Phase 5 Notes (Simplified)
 
@@ -243,3 +261,23 @@ All evaluated options had significant issues for Apple Containers:
 - **Garage**: Requires TOML config file, more setup complexity
 
 Recommendation: Use cloud object storage (S3, GCS, R2) if needed.
+
+### Phase 7 Notes
+
+**Architecture**: Traefik + Tailscale Serve for ingress
+
+- Traefik runs as platform service on port 10080 (HTTP) and 18080 (dashboard)
+- Tailscale Serve forwards HTTPS:443 → localhost:10080 with auto TLS
+- Path-based routing by default: `PathPrefix(/{{ .Name }})`
+- Services accessible at `https://hostname.ts.net/<service-name>`
+
+**Key Decisions:**
+- **No sudo required**: Using high ports + Tailscale Serve instead of binding to 80/443
+- **Path-based routing**: Host-based subdomains (`nginx.hostname.ts.net`) not supported by Tailscale MagicDNS
+- **Dynamic HCL**: Traefik needs Tailscale IP at deploy time to reach Nomad API from container
+
+**Files Added/Modified:**
+- `internal/services/jobs.go` - Traefik HCL template with `{{NOMAD_ADDR}}` placeholder
+- `internal/services/services.go` - `JobHCLFunc` for dynamic HCL generation
+- `internal/tailserve/serve.go` - Tailscale Serve helper (Enable/Disable/Status)
+- `example/nginx-traefik.nomad` - Example with explicit routing tags

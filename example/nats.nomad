@@ -29,11 +29,12 @@ job "nats" {
       driver = "apple-container"
 
       config {
-        image = "nats:latest"
-        ports = ["14222:4222", "16222:6222", "18222:8222"]
+        image   = "nats:latest"
+        network = "styx"
+        ports   = ["14222:4222", "16222:6222", "18222:8222"]
         # Note: For multi-node clustering, use Nomad template to resolve service addresses
         # or configure static routes via Tailscale hostnames
-        args  = [
+        args    = [
           "-cluster", "nats://0.0.0.0:6222",
           "-http_port", "8222",
           "-cluster_name", "styx-nats"

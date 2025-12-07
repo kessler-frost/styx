@@ -3,13 +3,16 @@ package services
 import (
 	"fmt"
 	"time"
+
+	"github.com/kessler-frost/styx/internal/network"
 )
 
 // Service represents a platform service
 type Service struct {
 	Name        string
 	Description string
-	JobHCL      string
+	JobHCL      string             // Static HCL for simple services
+	JobHCLFunc  func(string) string // Dynamic HCL generator (takes Tailscale IP)
 }
 
 // ServiceStatus represents the status of a platform service
@@ -31,6 +34,11 @@ var PlatformServices = []Service{
 		Description: "Redis-compatible cache (Dragonfly)",
 		JobHCL:      dragonflyJobHCL,
 	},
+	{
+		Name:        "traefik",
+		Description: "Ingress controller (Traefik)",
+		JobHCLFunc:  TraefikJobHCL,
+	},
 }
 
 // Deploy deploys a platform service by name
@@ -39,11 +47,27 @@ func Deploy(name string) error {
 
 	for _, svc := range PlatformServices {
 		if svc.Name == name {
-			return client.RunJob(svc.JobHCL)
+			hcl, err := getServiceHCL(svc)
+			if err != nil {
+				return fmt.Errorf("failed to generate HCL for %s: %w", name, err)
+			}
+			return client.RunJob(hcl)
 		}
 	}
 
 	return fmt.Errorf("unknown service: %s", name)
+}
+
+// getServiceHCL returns the HCL for a service, handling dynamic generation if needed
+func getServiceHCL(svc Service) (string, error) {
+	if svc.JobHCLFunc != nil {
+		tsInfo := network.GetTailscaleInfo()
+		if !tsInfo.Running {
+			return "", fmt.Errorf("tailscale is required for %s but not running", svc.Name)
+		}
+		return svc.JobHCLFunc(tsInfo.IP), nil
+	}
+	return svc.JobHCL, nil
 }
 
 // Stop stops a platform service by name
@@ -99,7 +123,11 @@ func DeployAll() error {
 
 	for _, svc := range PlatformServices {
 		fmt.Printf("  Deploying %s...\n", svc.Name)
-		if err := client.RunJob(svc.JobHCL); err != nil {
+		hcl, err := getServiceHCL(svc)
+		if err != nil {
+			return fmt.Errorf("failed to generate HCL for %s: %w", svc.Name, err)
+		}
+		if err := client.RunJob(hcl); err != nil {
 			return fmt.Errorf("failed to deploy %s: %w", svc.Name, err)
 		}
 	}

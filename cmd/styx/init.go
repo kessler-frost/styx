@@ -16,6 +16,7 @@ import (
 	"github.com/kessler-frost/styx/internal/launchd"
 	"github.com/kessler-frost/styx/internal/network"
 	"github.com/kessler-frost/styx/internal/services"
+	"github.com/kessler-frost/styx/internal/tailserve"
 	"github.com/kessler-frost/styx/internal/vault"
 	"github.com/spf13/cobra"
 )
@@ -171,6 +172,13 @@ func runServer() error {
 		fmt.Println("Tailscale not connected (cross-node networking will be limited)")
 		fmt.Println("  Install Tailscale: https://tailscale.com/download")
 	}
+
+	// Create container network for service-to-service communication
+	fmt.Println("Creating container network...")
+	if err := network.EnsureStyxNetwork(); err != nil {
+		return fmt.Errorf("failed to create container network: %w", err)
+	}
+	fmt.Printf("Container network ready: %s (%s)\n", network.StyxNetworkName, network.StyxNetworkSubnet)
 
 	// Create directories
 	dirs := []string{
@@ -385,10 +393,26 @@ wait
 		return fmt.Errorf("failed to deploy platform services: %w", err)
 	}
 
+	// Enable Tailscale Serve for HTTPS ingress
+	fmt.Println("\nEnabling Tailscale Serve for HTTPS ingress...")
+	if err := tailserve.Enable(); err != nil {
+		fmt.Printf("  Warning: failed to enable Tailscale Serve: %v\n", err)
+		fmt.Println("  Traefik is still available at http://localhost:10080")
+	}
+
+	// Get Tailscale info for displaying ingress URL
+	tsInfo := network.GetTailscaleInfo()
+
 	fmt.Println("\nStyx server started!")
 	fmt.Println("\nPlatform services:")
 	fmt.Println("  NATS:      nats://localhost:14222")
 	fmt.Println("  Dragonfly: redis://localhost:16379")
+	if tsInfo.Running {
+		fmt.Printf("  Traefik:   https://%s (ingress)\n", tsInfo.DNSName)
+	} else {
+		fmt.Println("  Traefik:   http://localhost:10080 (ingress)")
+	}
+	fmt.Println("             http://localhost:18080 (dashboard)")
 	fmt.Println("\nTo add more nodes, run on other Macs:")
 	fmt.Println("  styx init")
 	fmt.Println("\nCheck status with:")
@@ -445,6 +469,13 @@ func runClient(serverIP string) error {
 	} else {
 		fmt.Println("Tailscale not connected (cross-node networking will be limited)")
 	}
+
+	// Create container network for service-to-service communication
+	fmt.Println("Creating container network...")
+	if err := network.EnsureStyxNetwork(); err != nil {
+		return fmt.Errorf("failed to create container network: %w", err)
+	}
+	fmt.Printf("Container network ready: %s (%s)\n", network.StyxNetworkName, network.StyxNetworkSubnet)
 
 	// Create directories
 	dirs := []string{

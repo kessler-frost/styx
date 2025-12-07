@@ -10,6 +10,7 @@ job "alpine" {
 
       config {
         image   = "alpine:latest"
+        network = "styx"
         command = "sleep"
         args    = ["3600"]
       }

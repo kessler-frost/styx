@@ -15,7 +15,6 @@ import (
 	"github.com/hashicorp/nomad/plugins/shared/structs"
 	"github.com/kessler-frost/styx/driver/container"
 	"github.com/kessler-frost/styx/internal/network"
-	"github.com/kessler-frost/styx/internal/proxy"
 )
 
 const (
@@ -182,6 +181,12 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 	containerName := strings.ReplaceAll(cfg.ID, "/", "-")
 
 	// Build run options
+	// Always use styx network for container-to-container communication
+	containerNetwork := taskConfig.Network
+	if containerNetwork == "" {
+		containerNetwork = network.StyxNetworkName
+	}
+
 	opts := container.RunOptions{
 		Name:       containerName,
 		Image:      taskConfig.Image,
@@ -193,7 +198,7 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 		Memory:     taskConfig.Memory,
 		CPUs:       taskConfig.CPUs,
 		WorkingDir: taskConfig.WorkingDir,
-		Network:    taskConfig.Network,
+		Network:    containerNetwork,
 		Detach:     true,
 	}
 
@@ -231,7 +236,7 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 		d.logger.Info("container network info", "ip", containerIP)
 	}
 
-	// Create handle first so we can attach proxies to it
+	// Create handle for task lifecycle management
 	handle := newTaskHandle(d.client, d.logger, containerID, &taskConfig)
 
 	// Get Tailscale info for cross-node networking
@@ -240,30 +245,8 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 		d.logger.Info("tailscale detected", "hostname", tailscale.DNSName, "ip", tailscale.IP)
 	}
 
-	// Start TCP proxies for port forwarding (Phase 4 networking)
-	// Port format: "containerPort:hostPort" (e.g., "80:10080")
-	if containerIP != "" && len(taskConfig.Ports) > 0 {
-		for _, portMapping := range taskConfig.Ports {
-			parts := strings.Split(portMapping, ":")
-			if len(parts) != 2 {
-				d.logger.Warn("invalid port mapping format, expected hostPort:containerPort", "mapping", portMapping)
-				continue
-			}
-			hostPort := parts[0]
-			containerPort := parts[1]
-
-			listenAddr := fmt.Sprintf("0.0.0.0:%s", hostPort)
-			targetAddr := fmt.Sprintf("%s:%s", containerIP, containerPort)
-
-			p := proxy.NewTCPProxy(listenAddr, targetAddr)
-			if err := p.StartAsync(); err != nil {
-				d.logger.Warn("failed to start TCP proxy", "listen", listenAddr, "target", targetAddr, "error", err)
-				continue
-			}
-			d.logger.Info("started TCP proxy", "listen", listenAddr, "target", targetAddr)
-			handle.AddProxy(p)
-		}
-	}
+	// Note: Port forwarding is handled natively by the container's -p flag
+	// No TCP proxy needed - the container CLI exposes ports directly on the host
 
 	// Build PortMap from Nomad allocated ports
 	// cfg.Resources.Ports contains the allocated port mappings for this task

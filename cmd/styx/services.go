@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 
+	"github.com/kessler-frost/styx/internal/network"
 	"github.com/kessler-frost/styx/internal/services"
 	"github.com/spf13/cobra"
 )
@@ -10,7 +11,7 @@ import (
 var servicesCmd = &cobra.Command{
 	Use:   "services",
 	Short: "Manage platform services",
-	Long: `Manage Styx platform services (NATS, Dragonfly).
+	Long: `Manage Styx platform services (NATS, Dragonfly, Traefik).
 
 Platform services are automatically deployed when starting a server.
 Use this command to view status or manually start/stop services.`,
@@ -63,6 +64,13 @@ func runServicesList(cmd *cobra.Command, args []string) error {
 	fmt.Println("Endpoints (when running):")
 	fmt.Println("  NATS:      nats://localhost:14222")
 	fmt.Println("  Dragonfly: redis://localhost:16379")
+	tsInfo := network.GetTailscaleInfo()
+	if tsInfo.Running {
+		fmt.Printf("  Traefik:   https://%s (ingress)\n", tsInfo.DNSName)
+	} else {
+		fmt.Println("  Traefik:   http://localhost:10080 (ingress)")
+	}
+	fmt.Println("             http://localhost:18080 (dashboard)")
 
 	return nil
 }
@@ -73,7 +81,7 @@ func runServicesStart(cmd *cobra.Command, args []string) error {
 	// Verify it's a known service
 	svc := services.GetService(name)
 	if svc == nil {
-		return fmt.Errorf("unknown service: %s\n\nAvailable services: nats, dragonfly", name)
+		return fmt.Errorf("unknown service: %s\n\nAvailable services: nats, dragonfly, traefik", name)
 	}
 
 	// Check if Nomad is running
@@ -97,7 +105,7 @@ func runServicesStop(cmd *cobra.Command, args []string) error {
 	// Verify it's a known service
 	svc := services.GetService(name)
 	if svc == nil {
-		return fmt.Errorf("unknown service: %s\n\nAvailable services: nats, dragonfly", name)
+		return fmt.Errorf("unknown service: %s\n\nAvailable services: nats, dragonfly, traefik", name)
 	}
 
 	// Check if Nomad is running
