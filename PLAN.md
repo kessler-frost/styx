@@ -30,6 +30,11 @@
 - [x] Generate Nomad server/client configs
 - [x] launchd service integration
 - [x] `styx init` / `styx join` commands
+- [x] Auto-discover servers via Tailscale (`styx` with no args)
+  - Run `tailscale status` to get connected devices and IPs
+  - Probe each IP for running Nomad server (port 4646)
+  - Auto-join first discovered server (or prompt if multiple found)
+  - Prompt to start server if none found
 
 **Deliverable**: 2+ Macs running as Nomad cluster (COMPLETE)
 

@@ -29,8 +29,13 @@ var rootCmd = &cobra.Command{
 	Long: `Styx is a distributed system platform that uses Apple Containers
 and HashiCorp Nomad to orchestrate workloads across Mac fleets.
 
-Use 'styx init --server' to start a server node, or 'styx join <ip>'
-to join an existing cluster as a client node.`,
+Running 'styx' with no arguments auto-discovers servers on your
+Tailscale network and joins one.
+
+Manual options:
+  styx init --server   Start a server node
+  styx join <ip>       Join an existing cluster`,
+	RunE: runAutoDiscover,
 }
 
 func init() {
