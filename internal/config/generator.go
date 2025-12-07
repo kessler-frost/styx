@@ -5,8 +5,16 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"text/template"
 )
+
+// GetCPUTotalCompute returns the total CPU compute in MHz for Nomad scheduling.
+// Uses 1000 MHz per core as a baseline for scheduling purposes.
+func GetCPUTotalCompute() int {
+	cores := runtime.NumCPU()
+	return cores * 1000 // 1000 MHz per core
+}
 
 // ServerConfig holds the configuration values for a Nomad server node.
 type ServerConfig struct {
@@ -14,6 +22,7 @@ type ServerConfig struct {
 	AdvertiseIP     string // Local IP for cluster communication
 	BootstrapExpect int    // Number of servers to expect (usually 1 for single node)
 	PluginDir       string // Path to task driver plugins
+	CPUTotalCompute int    // Total CPU in MHz for scheduling (auto-detected if 0)
 	// TLS configuration
 	CAFile   string // Path to CA certificate
 	CertFile string // Path to server certificate
@@ -24,10 +33,11 @@ type ServerConfig struct {
 
 // ClientConfig holds the configuration values for a Nomad client node.
 type ClientConfig struct {
-	DataDir     string   // e.g., /var/lib/nomad
-	AdvertiseIP string   // Local IP for cluster communication
-	Servers     []string // Server IPs to join
-	PluginDir   string   // Path to task driver plugins
+	DataDir         string   // e.g., /var/lib/nomad
+	AdvertiseIP     string   // Local IP for cluster communication
+	Servers         []string // Server IPs to join
+	PluginDir       string   // Path to task driver plugins
+	CPUTotalCompute int      // Total CPU in MHz for scheduling (auto-detected if 0)
 	// TLS configuration
 	CAFile   string // Path to CA certificate
 	CertFile string // Path to client certificate

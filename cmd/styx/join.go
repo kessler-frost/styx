@@ -197,13 +197,14 @@ func runJoin(cmd *cobra.Command, args []string) error {
 	// Generate client config
 	fmt.Println("Generating client configuration...")
 	cfg := config.ClientConfig{
-		DataDir:     dataDir,
-		AdvertiseIP: ip,
-		Servers:     []string{serverIP},
-		PluginDir:   pluginDir,
-		CAFile:      certPaths.CAFile,
-		CertFile:    certPaths.CertFile,
-		KeyFile:     certPaths.KeyFile,
+		DataDir:         dataDir,
+		AdvertiseIP:     ip,
+		Servers:         []string{serverIP},
+		PluginDir:       pluginDir,
+		CPUTotalCompute: config.GetCPUTotalCompute(),
+		CAFile:          certPaths.CAFile,
+		CertFile:        certPaths.CertFile,
+		KeyFile:         certPaths.KeyFile,
 	}
 	configContent, err := config.GenerateClientConfig(cfg)
 	if err != nil {

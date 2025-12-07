@@ -229,6 +229,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 			AdvertiseIP:     ip,
 			BootstrapExpect: 1,
 			PluginDir:       pluginDir,
+			CPUTotalCompute: config.GetCPUTotalCompute(),
 			CAFile:          nomadCertPaths.CAFile,
 			CertFile:        nomadCertPaths.CertFile,
 			KeyFile:         nomadCertPaths.KeyFile,
@@ -237,13 +238,14 @@ func runInit(cmd *cobra.Command, args []string) error {
 	} else {
 		fmt.Println("Generating standalone client configuration...")
 		cfg := config.ClientConfig{
-			DataDir:     dataDir,
-			AdvertiseIP: ip,
-			Servers:     []string{ip}, // Point to self for standalone
-			PluginDir:   pluginDir,
-			CAFile:      nomadCertPaths.CAFile,
-			CertFile:    nomadCertPaths.CertFile,
-			KeyFile:     nomadCertPaths.KeyFile,
+			DataDir:         dataDir,
+			AdvertiseIP:     ip,
+			Servers:         []string{ip}, // Point to self for standalone
+			PluginDir:       pluginDir,
+			CPUTotalCompute: config.GetCPUTotalCompute(),
+			CAFile:          nomadCertPaths.CAFile,
+			CertFile:        nomadCertPaths.CertFile,
+			KeyFile:         nomadCertPaths.KeyFile,
 		}
 		configContent, err = config.GenerateClientConfig(cfg)
 	}

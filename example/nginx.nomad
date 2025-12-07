@@ -20,7 +20,7 @@ job "nginx" {
       }
 
       resources {
-        cpu    = 10
+        cpu    = 100
         memory = 32
       }
 

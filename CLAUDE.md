@@ -109,6 +109,13 @@ The user uses **mise** to install and manage package versions. When a tool needs
 - Vault: `mise install vault` or `brew install vault`
 - Tailscale: https://tailscale.com/download (for cross-node networking)
 
+### Running Commands
+
+- **Nomad**: Run `nomad` commands directly without environment variables (no NOMAD_ADDR, NOMAD_SKIP_VERIFY needed)
+- **Styx**: Run `./bin/styx` commands directly without sudo
+- **Consul**: Run `consul` commands directly
+- **Vault**: Run `vault` commands directly
+
 ### Testing
 
 - **After completing a phase**: Run the corresponding tests in `TEST.md`

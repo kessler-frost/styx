@@ -18,6 +18,9 @@ server {
 
 client {
   enabled = true
+
+  # Override CPU fingerprinting (apple-container driver doesn't report resources correctly)
+  cpu_total_compute = {{.CPUTotalCompute}}
 }
 
 plugin_dir = "{{.PluginDir}}"
@@ -71,6 +74,9 @@ advertise {
 client {
   enabled = true
   servers = [{{range $i, $s := .Servers}}{{if $i}}, {{end}}"{{$s}}:4647"{{end}}]
+
+  # Override CPU fingerprinting (apple-container driver doesn't report resources correctly)
+  cpu_total_compute = {{.CPUTotalCompute}}
 }
 
 plugin_dir = "{{.PluginDir}}"
