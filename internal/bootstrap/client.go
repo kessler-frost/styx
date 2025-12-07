@@ -9,20 +9,34 @@ import (
 	"time"
 )
 
-// FetchBootstrapFiles fetches CA cert and gossip key from a server's bootstrap endpoint.
+// FetchBootstrapFiles fetches all certificates and keys from a server's bootstrap endpoint.
 func FetchBootstrapFiles(serverIP, certsDir, secretsDir string) error {
 	client := &http.Client{Timeout: 10 * time.Second}
 	baseURL := fmt.Sprintf("http://%s:%d", serverIP, Port)
 
-	// Fetch and save Consul CA
-	caData, err := fetchFile(client, baseURL+"/bootstrap/consul-ca.pem")
-	if err != nil {
-		return fmt.Errorf("failed to fetch Consul CA: %w", err)
+	// Files to fetch: path -> (local filename, permissions)
+	certFiles := []struct {
+		endpoint  string
+		localName string
+		perm      os.FileMode
+	}{
+		{"/bootstrap/consul-ca.pem", "consul-agent-ca.pem", 0644},
+		{"/bootstrap/consul-client-cert.pem", "dc1-client-consul-0.pem", 0644},
+		{"/bootstrap/consul-client-key.pem", "dc1-client-consul-0-key.pem", 0600},
+		{"/bootstrap/nomad-ca.pem", "nomad-agent-ca.pem", 0644},
+		{"/bootstrap/nomad-client-cert.pem", "global-client-nomad.pem", 0644},
+		{"/bootstrap/nomad-client-key.pem", "global-client-nomad-key.pem", 0600},
 	}
 
-	caPath := filepath.Join(certsDir, "consul-agent-ca.pem")
-	if err := os.WriteFile(caPath, caData, 0644); err != nil {
-		return fmt.Errorf("failed to write Consul CA: %w", err)
+	for _, f := range certFiles {
+		data, err := fetchFile(client, baseURL+f.endpoint)
+		if err != nil {
+			return fmt.Errorf("failed to fetch %s: %w", f.endpoint, err)
+		}
+		path := filepath.Join(certsDir, f.localName)
+		if err := os.WriteFile(path, data, f.perm); err != nil {
+			return fmt.Errorf("failed to write %s: %w", f.localName, err)
+		}
 	}
 
 	// Fetch and save gossip key

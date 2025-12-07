@@ -33,6 +33,11 @@ func NewServer(tailscaleIP, certsDir, secretsDir string) (*Server, error) {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/bootstrap/consul-ca.pem", s.serveConsulCA)
+	mux.HandleFunc("/bootstrap/consul-client-cert.pem", s.serveConsulClientCert)
+	mux.HandleFunc("/bootstrap/consul-client-key.pem", s.serveConsulClientKey)
+	mux.HandleFunc("/bootstrap/nomad-ca.pem", s.serveNomadCA)
+	mux.HandleFunc("/bootstrap/nomad-client-cert.pem", s.serveNomadClientCert)
+	mux.HandleFunc("/bootstrap/nomad-client-key.pem", s.serveNomadClientKey)
 	mux.HandleFunc("/bootstrap/gossip.key", s.serveGossipKey)
 	mux.HandleFunc("/bootstrap/health", s.serveHealth)
 
@@ -70,13 +75,37 @@ func (s *Server) Addr() string {
 }
 
 func (s *Server) serveConsulCA(w http.ResponseWriter, r *http.Request) {
-	caPath := filepath.Join(s.certsDir, "consul-agent-ca.pem")
-	data, err := os.ReadFile(caPath)
+	s.serveFile(w, filepath.Join(s.certsDir, "consul-agent-ca.pem"), "application/x-pem-file")
+}
+
+func (s *Server) serveConsulClientCert(w http.ResponseWriter, r *http.Request) {
+	// Serve dc1-client-consul-0.pem (generated on server for clients)
+	s.serveFile(w, filepath.Join(s.certsDir, "dc1-client-consul-0.pem"), "application/x-pem-file")
+}
+
+func (s *Server) serveConsulClientKey(w http.ResponseWriter, r *http.Request) {
+	s.serveFile(w, filepath.Join(s.certsDir, "dc1-client-consul-0-key.pem"), "application/x-pem-file")
+}
+
+func (s *Server) serveNomadCA(w http.ResponseWriter, r *http.Request) {
+	s.serveFile(w, filepath.Join(s.certsDir, "nomad-agent-ca.pem"), "application/x-pem-file")
+}
+
+func (s *Server) serveNomadClientCert(w http.ResponseWriter, r *http.Request) {
+	s.serveFile(w, filepath.Join(s.certsDir, "global-client-nomad.pem"), "application/x-pem-file")
+}
+
+func (s *Server) serveNomadClientKey(w http.ResponseWriter, r *http.Request) {
+	s.serveFile(w, filepath.Join(s.certsDir, "global-client-nomad-key.pem"), "application/x-pem-file")
+}
+
+func (s *Server) serveFile(w http.ResponseWriter, path, contentType string) {
+	data, err := os.ReadFile(path)
 	if err != nil {
-		http.Error(w, "CA not found", http.StatusNotFound)
+		http.Error(w, "File not found", http.StatusNotFound)
 		return
 	}
-	w.Header().Set("Content-Type", "application/x-pem-file")
+	w.Header().Set("Content-Type", contentType)
 	w.Write(data)
 }
 

@@ -181,15 +181,15 @@ func runJoin(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to load gossip key: %w", err)
 	}
 
-	// Generate client certificate
-	var certPaths *tls.CertPaths
-	certPaths, err = tls.GetExistingCerts(certsDir, datacenter, false)
+	// Get existing client certificates (fetched from bootstrap or manually copied)
+	consulCertPaths, err := tls.GetExistingCerts(certsDir, datacenter, false)
 	if err != nil {
-		fmt.Println("Generating client certificates...")
-		certPaths, err = tls.GenerateClientCert(certsDir, datacenter)
-		if err != nil {
-			return fmt.Errorf("failed to generate client cert: %w", err)
-		}
+		return fmt.Errorf("Consul client certificates not found. Bootstrap may have failed: %w", err)
+	}
+
+	nomadCertPaths, err := tls.GetExistingNomadCerts(certsDir, "global", false)
+	if err != nil {
+		return fmt.Errorf("Nomad client certificates not found. Bootstrap may have failed: %w", err)
 	}
 	fmt.Printf("TLS certificates ready in: %s\n", certsDir)
 
@@ -201,9 +201,9 @@ func runJoin(cmd *cobra.Command, args []string) error {
 		Servers:         []string{serverIP},
 		PluginDir:       pluginDir,
 		CPUTotalCompute: config.GetCPUTotalCompute(),
-		CAFile:          certPaths.CAFile,
-		CertFile:        certPaths.CertFile,
-		KeyFile:         certPaths.KeyFile,
+		CAFile:          nomadCertPaths.CAFile,
+		CertFile:        nomadCertPaths.CertFile,
+		KeyFile:         nomadCertPaths.KeyFile,
 	}
 	configContent, err := config.GenerateClientConfig(cfg)
 	if err != nil {
@@ -222,9 +222,9 @@ func runJoin(cmd *cobra.Command, args []string) error {
 		DataDir:     consulDataDir,
 		AdvertiseIP: ip,
 		Servers:     []string{serverIP},
-		CAFile:      certPaths.CAFile,
-		CertFile:    certPaths.CertFile,
-		KeyFile:     certPaths.KeyFile,
+		CAFile:      consulCertPaths.CAFile,
+		CertFile:    consulCertPaths.CertFile,
+		KeyFile:     consulCertPaths.KeyFile,
 		GossipKey:   gossipKey,
 	}
 	consulConfigContent, err := config.GenerateConsulClientConfig(consulCfg)

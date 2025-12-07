@@ -172,6 +172,15 @@ func runInit(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return fmt.Errorf("failed to generate Nomad server cert: %w", err)
 		}
+
+		// Generate client certs for bootstrap distribution to joining nodes
+		fmt.Println("Generating client certificates for cluster nodes...")
+		if _, err := tls.GenerateClientCert(certsDir, datacenter); err != nil {
+			return fmt.Errorf("failed to generate Consul client cert: %w", err)
+		}
+		if _, err := tls.GenerateNomadClientCert(certsDir, region); err != nil {
+			return fmt.Errorf("failed to generate Nomad client cert: %w", err)
+		}
 	} else {
 		// Standalone client: generate client certs (reuse CAs if exist)
 		consulCertPaths, err = tls.GetExistingCerts(certsDir, datacenter, false)
