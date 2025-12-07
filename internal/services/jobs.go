@@ -4,6 +4,7 @@ import "strings"
 
 // Embedded HCL job specs for platform services
 
+// NATS job - no host ports, accessed via Traefik TCP routing
 const natsJobHCL = `job "nats" {
   datacenters = ["dc1"]
   type        = "service"
@@ -11,25 +12,12 @@ const natsJobHCL = `job "nats" {
   group "nats" {
     count = 1
 
-    network {
-      port "client" {
-        static = 4222
-      }
-      port "cluster" {
-        static = 6222
-      }
-      port "monitor" {
-        static = 8222
-      }
-    }
-
     task "nats" {
       driver = "apple-container"
 
       config {
         image   = "nats:latest"
         network = "styx"
-        ports   = ["4222:4222", "6222:6222", "8222:8222"]
         args    = [
           "-cluster", "nats://0.0.0.0:6222",
           "-http_port", "8222",
@@ -45,36 +33,42 @@ const natsJobHCL = `job "nats" {
       service {
         name         = "nats"
         provider     = "nomad"
-        port         = "client"
+        port         = 4222
         address_mode = "driver"
 
-        check {
-          type     = "http"
-          path     = "/healthz"
-          port     = "monitor"
-          interval = "10s"
-          timeout  = "2s"
-        }
+        tags = [
+          "traefik.enable=true",
+          "traefik.tcp.routers.nats.rule=HostSNI(` + "`*`" + `)",
+          "traefik.tcp.routers.nats.entrypoints=nats",
+          "traefik.tcp.services.nats.loadbalancer.server.port=4222"
+        ]
       }
 
       service {
         name         = "nats-cluster"
         provider     = "nomad"
-        port         = "cluster"
+        port         = 6222
         address_mode = "driver"
       }
 
       service {
         name         = "nats-monitor"
         provider     = "nomad"
-        port         = "monitor"
+        port         = 8222
         address_mode = "driver"
+
+        tags = [
+          "traefik.enable=true",
+          "traefik.http.routers.nats-monitor.rule=PathPrefix(` + "`/nats`" + `)",
+          "traefik.http.routers.nats-monitor.entrypoints=http"
+        ]
       }
     }
   }
 }
 `
 
+// Dragonfly job - no host ports, accessed via Traefik TCP routing
 const dragonflyJobHCL = `job "dragonfly" {
   datacenters = ["dc1"]
   type        = "service"
@@ -82,19 +76,12 @@ const dragonflyJobHCL = `job "dragonfly" {
   group "dragonfly" {
     count = 1
 
-    network {
-      port "redis" {
-        static = 6379
-      }
-    }
-
     task "dragonfly" {
       driver = "apple-container"
 
       config {
         image   = "docker.dragonflydb.io/dragonflydb/dragonfly:latest"
         network = "styx"
-        ports   = ["6379:6379"]
         args    = [
           "--bind", "0.0.0.0",
           "--port", "6379",
@@ -111,15 +98,15 @@ const dragonflyJobHCL = `job "dragonfly" {
       service {
         name         = "dragonfly"
         provider     = "nomad"
-        port         = "redis"
+        port         = 6379
         address_mode = "driver"
 
-        check {
-          type     = "tcp"
-          port     = "redis"
-          interval = "10s"
-          timeout  = "2s"
-        }
+        tags = [
+          "traefik.enable=true",
+          "traefik.tcp.routers.redis.rule=HostSNI(` + "`*`" + `)",
+          "traefik.tcp.routers.redis.entrypoints=redis",
+          "traefik.tcp.services.redis.loadbalancer.server.port=6379"
+        ]
       }
     }
   }
@@ -127,6 +114,7 @@ const dragonflyJobHCL = `job "dragonfly" {
 `
 
 // traefikJobHCLTemplate is the HCL template for Traefik ingress controller.
+// Traefik is the ONLY service with host port exposure - all traffic goes through it.
 // It requires the Nomad API address to be substituted via TraefikJobHCL().
 const traefikJobHCLTemplate = `job "traefik" {
   datacenters = ["dc1"]
@@ -142,6 +130,12 @@ const traefikJobHCLTemplate = `job "traefik" {
       port "dashboard" {
         static = 4201
       }
+      port "nats" {
+        static = 4222
+      }
+      port "redis" {
+        static = 6379
+      }
     }
 
     task "traefik" {
@@ -150,17 +144,18 @@ const traefikJobHCLTemplate = `job "traefik" {
       config {
         image   = "traefik:v3.2"
         network = "styx"
-        ports   = ["4200:80", "4201:8080"]
+        ports   = ["4200:80", "4201:8080", "4222:4222", "6379:6379"]
         args    = [
           "--log.level=DEBUG",
           "--entryPoints.http.address=:80",
+          "--entryPoints.nats.address=:4222",
+          "--entryPoints.redis.address=:6379",
           "--api.dashboard=true",
           "--api.insecure=true",
           "--ping=true",
           "--providers.nomad=true",
           "--providers.nomad.endpoint.address=http://{{NOMAD_ADDR}}:4646",
-          "--providers.nomad.exposedByDefault=true",
-          "--providers.nomad.defaultRule=PathPrefix(` + "`" + `/{{ .Name }}` + "`" + `)"
+          "--providers.nomad.exposedByDefault=false"
         ]
       }
 

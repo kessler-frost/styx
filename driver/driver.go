@@ -260,22 +260,15 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 		d.logger.Info("built port map for driver network", "portmap", portMap)
 	}
 
-	// Build DriverNetwork with Tailscale IP if available
-	if tailscale.Running && tailscale.IP != "" {
-		// Use Tailscale IP for service registration (health checks need IP, not DNS)
-		driverNetwork = &drivers.DriverNetwork{
-			IP:            tailscale.IP,
-			AutoAdvertise: true,
-			PortMap:       portMap,
-		}
-		d.logger.Info("using tailscale for service registration", "ip", tailscale.IP, "dns_name", tailscale.DNSName)
-	} else if containerIP != "" {
-		// Fall back to container IP (local-only access)
+	// Build DriverNetwork with container IP for service registration
+	// All services go through Traefik, which reaches containers directly on the styx network
+	if containerIP != "" {
 		driverNetwork = &drivers.DriverNetwork{
 			IP:            containerIP,
 			AutoAdvertise: true,
 			PortMap:       portMap,
 		}
+		d.logger.Info("using container IP for service registration", "ip", containerIP)
 	}
 
 	// Store the handle
