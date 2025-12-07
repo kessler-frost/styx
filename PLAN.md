@@ -29,8 +29,11 @@
 - [x] Download/manage Nomad binary (prerequisite: `brew install nomad`)
 - [x] Generate Nomad server/client configs
 - [x] launchd service integration
-- [x] `styx` / `styx -y` / `styx <ip>` commands
-- [x] Auto-discover servers via Tailscale (`styx` with no args)
+- [x] `styx init` command with modes:
+  - `styx init` - auto-discover servers via Tailscale
+  - `styx init --serve` - force server mode
+  - `styx init --join <ip>` - join a specific server
+- [x] Auto-discover servers via Tailscale
   - Run `tailscale status` to get connected devices and IPs
   - Probe each IP for running Nomad server (port 4646)
   - Auto-join first discovered server (or prompt if multiple found)
@@ -85,14 +88,23 @@ No additional TLS or gossip encryption needed when all nodes are on the same Tai
 ---
 
 ## Phase 6: Distributed Primitives ✓
-**Goal**: Cache, queue, storage available to services
+**Goal**: Cache, queue, storage available as platform services
 
-- [x] Deploy NATS as Nomad job (message queue)
-- [x] Deploy Dragonfly as Nomad job (Redis-compatible cache, replaced Olric which lacks ARM64)
+- [x] Platform services package (`internal/services/`)
+  - Embedded job specs for NATS and Dragonfly
+  - Nomad API client for job deployment
+  - Service registry with Deploy/Stop/Status functions
+- [x] Auto-deploy platform services on `styx init --serve`
+  - NATS (message queue) at port 14222
+  - Dragonfly (Redis-compatible cache) at port 16379
+- [x] `styx services` command
+  - `styx services` - list platform services with status
+  - `styx services start <name>` - start a service
+  - `styx services stop <name>` - stop a service
 - [ ] Deploy S3-compatible storage (deferred - see Notes)
 - [x] Example Go client for Dragonfly (`example/test-dragonfly/`)
 
-**Deliverable**: Services can use redis:// nats:// endpoints (COMPLETE - s3:// deferred)
+**Deliverable**: Platform services auto-deployed with Styx (COMPLETE - s3:// deferred)
 
 ---
 
@@ -209,8 +221,16 @@ Removed Consul, TLS certificates, and gossip encryption in favor of simpler arch
 - Nomad-Vault integration uses workload identities (JWT auth) for secure, short-lived tokens
 - No TLS certificates needed - Tailscale WireGuard handles encryption
 
-### Phase 6 Discoveries
+### Phase 6 Notes
 
+**Revised Dec 2025**: Platform services are now first-class Styx features, not just examples.
+
+- `internal/services/` package manages NATS and Dragonfly
+- Services auto-deploy when starting a server (`styx init --serve`)
+- `styx services` command for status and manual control
+- Job specs embedded in Go code (no external files needed)
+
+**Discoveries:**
 - **Olric doesn't support ARM64** - Docker images are linux/amd64 only. Replaced with Dragonfly (Redis-compatible)
 - **Dragonfly requires explicit memory config** - Must pass `--maxmemory=1gb` to prevent reading system memory
 - **NATS works well** - Simple deployment, HTTP monitoring at port 18222
