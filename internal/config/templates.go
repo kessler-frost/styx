@@ -18,7 +18,8 @@ server {
 }
 
 client {
-  enabled = true
+  enabled    = true
+  node_class = "server"
 
   # Override CPU fingerprinting (apple-container driver doesn't report resources correctly)
   cpu_total_compute = {{.CPUTotalCompute}}
@@ -44,6 +45,13 @@ vault {
     file = true
     ttl  = "1h"
   }
+}
+
+telemetry {
+  collection_interval        = "10s"
+  prometheus_metrics         = true
+  publish_allocation_metrics = true
+  publish_node_metrics       = true
 }
 `
 
@@ -73,5 +81,12 @@ plugin "apple-container" {
   config {
     container_bin_path = "/usr/local/bin/container"
   }
+}
+
+telemetry {
+  collection_interval        = "10s"
+  prometheus_metrics         = true
+  publish_allocation_metrics = true
+  publish_node_metrics       = true
 }
 `

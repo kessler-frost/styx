@@ -126,12 +126,22 @@ Path-based routing by default: services at `https://hostname.ts.net/<service-nam
 ## Phase 8: Observability
 **Goal**: See what's happening
 
-- [ ] Centralized logging (Loki or similar)
-- [ ] Metrics collection (Prometheus/VictoriaMetrics)
-- [ ] Basic dashboards (Grafana)
-- [ ] Optional: Distributed tracing (Jaeger)
+- [x] Add telemetry block to Nomad config for metrics endpoint
+- [x] Add node_class to server config for job constraints
+- [x] Update Traefik with Prometheus metrics endpoint (port 8082)
+- [x] Deploy Prometheus (server only) with Nomad service discovery
+- [x] Deploy Loki (server only) for log aggregation
+- [x] Deploy Grafana (server only) with pre-configured datasources
+- [x] Deploy Promtail (system job, all nodes) for log shipping
+- [x] Register observability services in platform services
+- [x] Update CLI to show new endpoints
+- [x] Test metrics collection from Nomad, Traefik
+- [~] Test log collection from container allocations
 
-**Deliverable**: Logs, metrics, traces in one place
+**Note**: Prometheus uses Nomad Service Discovery to auto-discover services tagged with
+`prometheus.scrape=true`. NATS metrics require a separate exporter (not included).
+
+**Deliverable**: Logs, metrics, dashboards via Grafana
 
 ---
 
@@ -176,7 +186,8 @@ Path-based routing by default: services at `https://hostname.ts.net/<service-nam
 | TLS Termination | Tailscale Serve | 7 |
 | Logging | Loki | 8 |
 | Metrics | Prometheus | 8 |
-| Tracing | Jaeger (optional) | 8 |
+| Dashboards | Grafana | 8 |
+| Log Shipping | Promtail | 8 |
 | Backup/DR | TBD | 9 |
 | Management UI | SSH TUI | 10 |
 
@@ -280,3 +291,40 @@ Recommendation: Use cloud object storage (S3, GCS, R2) if needed.
 - `internal/services/services.go` - `JobHCLFunc` for dynamic HCL generation
 - `internal/tailserve/serve.go` - Tailscale Serve helper (Enable/Disable/Status)
 - `example/nginx-traefik.nomad` - Example with explicit routing tags
+
+### Phase 8 Notes
+
+**Architecture**: Distributed observability with Prometheus + Loki + Grafana
+
+- Prometheus, Loki, Grafana run on server nodes only (constraint: `node.class = "server"`)
+- Promtail runs on ALL nodes as system job to ship logs to Loki
+- Prometheus scrapes metrics from Nomad, Traefik, and tagged services
+- Grafana pre-configured with Prometheus and Loki datasources
+
+**Port Assignments:**
+- Prometheus: 9090 (routed via Traefik at `/prometheus`)
+- Loki: 3100 (internal, receives logs from Promtail)
+- Grafana: 3000 (routed via Traefik at `/grafana`)
+- Promtail: 9080 (agent metrics)
+- Traefik metrics: 8082
+
+**Nomad Config Updates:**
+- Added `telemetry` block to expose `/v1/metrics?format=prometheus`
+- Added `node_class = "server"` to server config for job constraints
+
+**Files Modified:**
+- `internal/config/templates.go` - Added telemetry block, node_class to server
+- `internal/services/jobs.go` - Added Prometheus, Loki, Grafana, Promtail job templates; updated Traefik with metrics
+- `internal/services/services.go` - Added HCLParam field, registered new services
+- `cmd/styx/services.go` - Updated CLI output with new endpoints
+- `driver/config.go` - Fixed env hclspec to use `hclutils.MapStrStr` for HCL2 map support
+
+**Discoveries:**
+- **Driver auto-mounts**: Task driver auto-mounts `${NOMAD_TASK_DIR}` to `/local`, so job specs
+  should reference `/local/filename.yml` for template-rendered files (not mount the dir again)
+- **HCL2 env maps**: For env maps in task driver config, use `hclutils.MapStrStr` type with
+  `list(map(string))` hclspec - this handles HCL2's map serialization correctly
+- **Prometheus Nomad SD**: Use `nomad_sd_configs` instead of static `.nomad.service` DNS names -
+  containers can't resolve those. Services tagged with `prometheus.scrape=true` are auto-discovered.
+- **Service port registration**: When using `address_mode = "driver"`, use numeric port values
+  (e.g., `port = 8082`) not port labels - labels don't resolve to actual ports

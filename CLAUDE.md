@@ -132,6 +132,15 @@ The user uses **mise** to install and manage package versions. When a tool needs
 3. Add checkmark to phase header in PLAN.md (e.g., `## Phase 1: Foundation ✓`)
 4. Commit changes
 
+### Parallel Agent Execution
+
+When implementing plans with multiple independent tasks:
+- Group tasks by file dependencies to avoid conflicts
+- Launch multiple agents in parallel for independent work (use single message with multiple Task tool calls)
+- Use waves: complete dependent tasks before starting dependents
+- Maximize parallelism to reduce implementation time
+- Example: If modifying 3 different files, launch 3 agents simultaneously
+
 ### Architecture Notes
 
 **Simplified Stack**: Styx uses Nomad + Vault + Tailscale (no Consul):
@@ -145,3 +154,9 @@ The user uses **mise** to install and manage package versions. When a tool needs
 - NATS: 4222 (client), 6222 (cluster), 8222 (monitor)
 - Dragonfly: 6379 (Redis-compatible)
 - Traefik: 4200 (HTTP ingress), 4201 (dashboard)
+
+**Prometheus Metrics**: To add metrics scraping for a new service, add the tag:
+```hcl
+tags = ["prometheus.scrape=true"]
+```
+Prometheus uses Nomad Service Discovery to auto-discover tagged services.

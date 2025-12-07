@@ -3,6 +3,7 @@ package main
 import (
 	"time"
 
+	"github.com/hashicorp/nomad/helper/pluginutils/hclutils"
 	"github.com/hashicorp/nomad/plugins/shared/hclspec"
 )
 
@@ -37,16 +38,16 @@ type Config struct {
 
 // TaskConfig contains the task configuration
 type TaskConfig struct {
-	Image      string            `codec:"image"`
-	Command    string            `codec:"command"`
-	Args       []string          `codec:"args"`
-	Env        map[string]string `codec:"env"`
-	Ports      []string          `codec:"ports"`
-	Volumes    []string          `codec:"volumes"`
-	Memory     string            `codec:"memory"`
-	CPUs       int               `codec:"cpus"`
-	WorkingDir string            `codec:"working_dir"`
-	Network    string            `codec:"network"`
+	Image      string             `codec:"image"`
+	Command    string             `codec:"command"`
+	Args       []string           `codec:"args"`
+	Env        hclutils.MapStrStr `codec:"env"`
+	Ports      []string           `codec:"ports"`
+	Volumes    []string           `codec:"volumes"`
+	Memory     string             `codec:"memory"`
+	CPUs       int                `codec:"cpus"`
+	WorkingDir string             `codec:"working_dir"`
+	Network    string             `codec:"network"`
 }
 
 // TaskState is the state which is encoded in the handle returned to Nomad client.

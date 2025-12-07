@@ -2,6 +2,8 @@ package services
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/kessler-frost/styx/internal/network"
@@ -11,8 +13,9 @@ import (
 type Service struct {
 	Name        string
 	Description string
-	JobHCL      string             // Static HCL for simple services
-	JobHCLFunc  func(string) string // Dynamic HCL generator (takes Tailscale IP)
+	JobHCL      string              // Static HCL for simple services
+	JobHCLFunc  func(string) string // Dynamic HCL generator
+	HCLParam    string              // Parameter type: "tailscale_ip" (default) or "alloc_dir"
 }
 
 // ServiceStatus represents the status of a platform service
@@ -39,6 +42,27 @@ var PlatformServices = []Service{
 		Description: "Ingress controller (Traefik)",
 		JobHCLFunc:  TraefikJobHCL,
 	},
+	{
+		Name:        "prometheus",
+		Description: "Metrics server (Prometheus)",
+		JobHCLFunc:  PrometheusJobHCL,
+	},
+	{
+		Name:        "loki",
+		Description: "Log aggregation (Loki)",
+		JobHCL:      lokiJobHCL,
+	},
+	{
+		Name:        "grafana",
+		Description: "Dashboards (Grafana)",
+		JobHCL:      grafanaJobHCL,
+	},
+	{
+		Name:        "promtail",
+		Description: "Log shipper (Promtail)",
+		JobHCLFunc:  PromtailJobHCL,
+		HCLParam:    "alloc_dir",
+	},
 }
 
 // Deploy deploys a platform service by name
@@ -61,11 +85,21 @@ func Deploy(name string) error {
 // getServiceHCL returns the HCL for a service, handling dynamic generation if needed
 func getServiceHCL(svc Service) (string, error) {
 	if svc.JobHCLFunc != nil {
-		tsInfo := network.GetTailscaleInfo()
-		if !tsInfo.Running {
-			return "", fmt.Errorf("tailscale is required for %s but not running", svc.Name)
+		switch svc.HCLParam {
+		case "alloc_dir":
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return "", fmt.Errorf("failed to get home directory: %w", err)
+			}
+			allocDir := filepath.Join(home, ".styx", "nomad", "alloc")
+			return svc.JobHCLFunc(allocDir), nil
+		default: // "tailscale_ip" or empty
+			tsInfo := network.GetTailscaleInfo()
+			if !tsInfo.Running {
+				return "", fmt.Errorf("tailscale is required for %s but not running", svc.Name)
+			}
+			return svc.JobHCLFunc(tsInfo.IP), nil
 		}
-		return svc.JobHCLFunc(tsInfo.IP), nil
 	}
 	return svc.JobHCL, nil
 }

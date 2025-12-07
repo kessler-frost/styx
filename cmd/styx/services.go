@@ -11,7 +11,10 @@ import (
 var servicesCmd = &cobra.Command{
 	Use:   "services",
 	Short: "Manage platform services",
-	Long: `Manage Styx platform services (NATS, Dragonfly, Traefik).
+	Long: `Manage Styx platform services.
+
+Core services: NATS (messaging), Dragonfly (cache), Traefik (ingress)
+Observability: Prometheus (metrics), Loki (logs), Grafana (dashboards), Promtail (log shipper)
 
 Platform services are automatically deployed when starting a server.
 Use this command to view status or manually start/stop services.`,
@@ -62,15 +65,20 @@ func runServicesList(cmd *cobra.Command, args []string) error {
 
 	fmt.Println()
 	fmt.Println("Endpoints (when running):")
-	fmt.Println("  NATS:      nats://localhost:4222")
-	fmt.Println("  Dragonfly: redis://localhost:6379")
+	fmt.Println("  NATS:       nats://localhost:4222")
+	fmt.Println("  Dragonfly:  redis://localhost:6379")
 	tsInfo := network.GetTailscaleInfo()
 	if tsInfo.Running {
-		fmt.Printf("  Traefik:   https://%s (ingress)\n", tsInfo.DNSName)
+		fmt.Printf("  Traefik:    https://%s (ingress)\n", tsInfo.DNSName)
+		fmt.Printf("  Grafana:    https://%s/grafana\n", tsInfo.DNSName)
+		fmt.Printf("  Prometheus: https://%s/prometheus\n", tsInfo.DNSName)
 	} else {
-		fmt.Println("  Traefik:   http://localhost:4200 (ingress)")
+		fmt.Println("  Traefik:    http://localhost:4200 (ingress)")
+		fmt.Println("  Grafana:    http://localhost:4200/grafana")
+		fmt.Println("  Prometheus: http://localhost:4200/prometheus")
 	}
-	fmt.Println("             http://localhost:4201 (dashboard)")
+	fmt.Println("              http://localhost:4201 (traefik dashboard)")
+	fmt.Println("  Loki:       http://localhost:3100 (internal)")
 
 	return nil
 }
@@ -81,7 +89,7 @@ func runServicesStart(cmd *cobra.Command, args []string) error {
 	// Verify it's a known service
 	svc := services.GetService(name)
 	if svc == nil {
-		return fmt.Errorf("unknown service: %s\n\nAvailable services: nats, dragonfly, traefik", name)
+		return fmt.Errorf("unknown service: %s\n\nAvailable services: nats, dragonfly, traefik, prometheus, loki, grafana, promtail", name)
 	}
 
 	// Check if Nomad is running
@@ -105,7 +113,7 @@ func runServicesStop(cmd *cobra.Command, args []string) error {
 	// Verify it's a known service
 	svc := services.GetService(name)
 	if svc == nil {
-		return fmt.Errorf("unknown service: %s\n\nAvailable services: nats, dragonfly, traefik", name)
+		return fmt.Errorf("unknown service: %s\n\nAvailable services: nats, dragonfly, traefik, prometheus, loki, grafana, promtail", name)
 	}
 
 	// Check if Nomad is running
