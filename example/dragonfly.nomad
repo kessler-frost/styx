@@ -41,6 +41,7 @@ job "dragonfly" {
       # Redis-compatible client service
       service {
         name         = "dragonfly"
+        provider     = "nomad"  # Nomad native service discovery
         port         = "redis"
         address_mode = "driver"
 

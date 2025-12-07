@@ -16,6 +16,7 @@ job "nginx-vault" {
 
       service {
         name         = "nginx-vault"
+        provider     = "nomad"  # Nomad native service discovery
         port         = "http"
         address_mode = "driver"
 

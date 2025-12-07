@@ -6,10 +6,10 @@ import (
 )
 
 // VaultServerConfigTemplate is the HCL template for a Vault server.
-// Vault uses Consul as its storage backend for HA.
-const VaultServerConfigTemplate = `storage "consul" {
-  address = "127.0.0.1:8500"
-  path    = "vault/"
+// Vault uses integrated Raft storage (no external dependencies).
+const VaultServerConfigTemplate = `storage "raft" {
+  path    = "{{.DataDir}}"
+  node_id = "{{.NodeID}}"
 }
 
 listener "tcp" {
@@ -26,6 +26,8 @@ disable_mlock = true
 
 // VaultConfig holds the configuration values for a Vault server.
 type VaultConfig struct {
+	DataDir     string // Path to Raft storage directory
+	NodeID      string // Unique node identifier
 	AdvertiseIP string // Local IP for cluster communication
 }
 

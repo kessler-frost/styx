@@ -11,7 +11,6 @@ import (
 	"github.com/kessler-frost/styx/internal/config"
 	"github.com/kessler-frost/styx/internal/launchd"
 	"github.com/kessler-frost/styx/internal/network"
-	"github.com/kessler-frost/styx/internal/tls"
 	"github.com/spf13/cobra"
 )
 
@@ -53,13 +52,6 @@ func runJoin(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Printf("Found nomad at: %s\n", nomadPath)
 
-	// Check for consul binary
-	consulPath, err := exec.LookPath("consul")
-	if err != nil {
-		return fmt.Errorf("consul not found in PATH. Please install consul first: brew install consul")
-	}
-	fmt.Printf("Found consul at: %s\n", consulPath)
-
 	// Check for container CLI
 	containerPath, err := exec.LookPath("container")
 	if err != nil {
@@ -80,18 +72,6 @@ func runJoin(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Println("Nomad server is reachable and healthy")
 
-	// Verify Consul server is reachable
-	fmt.Printf("Checking Consul server at %s...\n", serverIP)
-	resp, err = client.Get(fmt.Sprintf("http://%s:8500/v1/status/leader", serverIP))
-	if err != nil {
-		return fmt.Errorf("cannot reach Consul server at %s:8500: %w", serverIP, err)
-	}
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("Consul server at %s is not healthy (status %d)", serverIP, resp.StatusCode)
-	}
-	fmt.Println("Consul server is reachable and healthy")
-
 	// Detect local IP
 	ip, err := network.GetPreferredIP()
 	if err != nil {
@@ -99,11 +79,12 @@ func runJoin(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Printf("Detected local IP: %s\n", ip)
 
-	// Check Tailscale status for Phase 4 networking
+	// Check Tailscale status for networking
 	tailscale := network.GetTailscaleInfo()
 	if tailscale.Running {
 		fmt.Printf("Tailscale connected: %s (%s)\n", tailscale.DNSName, tailscale.IP)
 		fmt.Println("  Services will be reachable via Tailscale from other nodes")
+		fmt.Println("  Transport encryption provided by Tailscale WireGuard")
 	} else {
 		fmt.Println("Tailscale not connected (cross-node networking will be limited)")
 		fmt.Println("  Install Tailscale: https://tailscale.com/download")
@@ -115,9 +96,6 @@ func runJoin(cmd *cobra.Command, args []string) error {
 		configDir,
 		logDir,
 		pluginDir,
-		consulDataDir,
-		certsDir,
-		secretsDir,
 	}
 
 	for _, dir := range dirs {
@@ -147,52 +125,6 @@ func runJoin(cmd *cobra.Command, args []string) error {
 		fmt.Printf("Warning: plugin not found at %s, assuming already installed\n", pluginSrc)
 	}
 
-	// Setup TLS certificates
-	fmt.Println("Setting up TLS certificates...")
-	datacenter := "dc1"
-
-	// Check if CA exists (must be copied from server)
-	caFile := filepath.Join(certsDir, "consul-agent-ca.pem")
-	if _, err := os.Stat(caFile); os.IsNotExist(err) {
-		fmt.Println("\n⚠️  TLS certificates required!")
-		fmt.Println("Copy the following files from the server to this machine:")
-		fmt.Printf("  Server: ~/.styx/certs/consul-agent-ca.pem\n")
-		fmt.Printf("      To: %s\n", caFile)
-		fmt.Printf("  Server: ~/.styx/secrets/gossip.key\n")
-		fmt.Printf("      To: %s/gossip.key\n", secretsDir)
-		fmt.Println("\nThen run 'styx join' again.")
-		return fmt.Errorf("CA certificate not found - copy from server first")
-	}
-
-	// Check if gossip key exists (must be copied from server)
-	gossipKeyFile := filepath.Join(secretsDir, "gossip.key")
-	if _, err := os.Stat(gossipKeyFile); os.IsNotExist(err) {
-		fmt.Println("\n⚠️  Gossip key required!")
-		fmt.Println("Copy the gossip key from the server:")
-		fmt.Printf("  Server: ~/.styx/secrets/gossip.key\n")
-		fmt.Printf("      To: %s\n", gossipKeyFile)
-		fmt.Println("\nThen run 'styx join' again.")
-		return fmt.Errorf("gossip key not found - copy from server first")
-	}
-
-	// Load gossip key
-	gossipKey, err := tls.LoadGossipKey(secretsDir)
-	if err != nil {
-		return fmt.Errorf("failed to load gossip key: %w", err)
-	}
-
-	// Get existing client certificates (fetched from bootstrap or manually copied)
-	consulCertPaths, err := tls.GetExistingCerts(certsDir, datacenter, false)
-	if err != nil {
-		return fmt.Errorf("Consul client certificates not found. Bootstrap may have failed: %w", err)
-	}
-
-	nomadCertPaths, err := tls.GetExistingNomadCerts(certsDir, "global", false)
-	if err != nil {
-		return fmt.Errorf("Nomad client certificates not found. Bootstrap may have failed: %w", err)
-	}
-	fmt.Printf("TLS certificates ready in: %s\n", certsDir)
-
 	// Generate client config
 	fmt.Println("Generating client configuration...")
 	cfg := config.ClientConfig{
@@ -201,9 +133,6 @@ func runJoin(cmd *cobra.Command, args []string) error {
 		Servers:         []string{serverIP},
 		PluginDir:       pluginDir,
 		CPUTotalCompute: config.GetCPUTotalCompute(),
-		CAFile:          nomadCertPaths.CAFile,
-		CertFile:        nomadCertPaths.CertFile,
-		KeyFile:         nomadCertPaths.KeyFile,
 	}
 	configContent, err := config.GenerateClientConfig(cfg)
 	if err != nil {
@@ -216,65 +145,27 @@ func runJoin(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to write nomad config: %w", err)
 	}
 
-	// Generate Consul client config
-	fmt.Println("Generating Consul client configuration...")
-	consulCfg := config.ConsulClientConfig{
-		DataDir:     consulDataDir,
-		AdvertiseIP: ip,
-		Servers:     []string{serverIP},
-		CAFile:      consulCertPaths.CAFile,
-		CertFile:    consulCertPaths.CertFile,
-		KeyFile:     consulCertPaths.KeyFile,
-		GossipKey:   gossipKey,
-	}
-	consulConfigContent, err := config.GenerateConsulClientConfig(consulCfg)
-	if err != nil {
-		return fmt.Errorf("failed to generate consul config: %w", err)
-	}
-
-	consulConfigPath := filepath.Join(configDir, "consul.hcl")
-	fmt.Printf("Writing Consul config to: %s\n", consulConfigPath)
-	if err := config.WriteConfig(consulConfigPath, consulConfigContent); err != nil {
-		return fmt.Errorf("failed to write consul config: %w", err)
-	}
-
-	// Create wrapper script that starts both Consul and Nomad
+	// Create wrapper script that starts Nomad
 	wrapperPath := filepath.Join(configDir, "styx-agent.sh")
-	consulConfigFile := filepath.Join(configDir, "consul.hcl")
 	wrapperContent := fmt.Sprintf(`#!/bin/bash
-# Styx agent wrapper - starts Consul and Nomad together
+# Styx agent wrapper - starts Nomad
 set -e
 
 cleanup() {
     echo "Stopping services..."
     kill $NOMAD_PID 2>/dev/null || true
-    kill $CONSUL_PID 2>/dev/null || true
     exit 0
 }
 
 trap cleanup SIGTERM SIGINT
 
-# Start Consul
-"%s" agent -config-file="%s" &
-CONSUL_PID=$!
-
-# Wait for Consul to be healthy
-echo "Waiting for Consul..."
-for i in {1..30}; do
-    if curl -s http://127.0.0.1:8500/v1/status/leader | grep -q .; then
-        echo "Consul is ready"
-        break
-    fi
-    sleep 1
-done
-
 # Start Nomad
 "%s" agent -config="%s/nomad.hcl" &
 NOMAD_PID=$!
 
-# Wait for either to exit
+# Wait for exit
 wait
-`, consulPath, consulConfigFile, nomadPath, configDir)
+`, nomadPath, configDir)
 
 	fmt.Printf("Writing wrapper script to: %s\n", wrapperPath)
 	if err := os.WriteFile(wrapperPath, []byte(wrapperContent), 0755); err != nil {
@@ -316,12 +207,6 @@ wait
 		return fmt.Errorf("failed to load service: %w", err)
 	}
 
-	// Wait for Consul to become healthy
-	fmt.Println("Waiting for Consul to become healthy...")
-	if err := waitForConsulHealthJoin(30 * time.Second); err != nil {
-		return fmt.Errorf("consul failed to start: %w\nCheck logs at %s", err, filepath.Join(logDir, "styx.log"))
-	}
-
 	// Wait for Nomad to become healthy locally
 	fmt.Println("Waiting for Nomad client to start...")
 	if err := waitForNomadHealth(60 * time.Second); err != nil {
@@ -336,30 +221,10 @@ wait
 	fmt.Printf("Server: %s\n", serverIP)
 	fmt.Println("\nCheck status with:")
 	fmt.Println("  styx status           # Show Styx status")
-	fmt.Println("  consul members        # List Consul members")
 	fmt.Println("  nomad node status     # List Nomad nodes")
-	fmt.Println("\nConsul UI: http://127.0.0.1:8500 (HTTPS: https://127.0.0.1:8501)")
-	fmt.Println("TLS enabled - APIs secured with mTLS")
+	fmt.Println("  nomad service list    # List registered services")
+	fmt.Println("\nNomad UI:  http://127.0.0.1:4646")
+	fmt.Println("Transport encryption provided by Tailscale WireGuard")
 
 	return nil
 }
-
-func waitForConsulHealthJoin(timeout time.Duration) error {
-	deadline := time.Now().Add(timeout)
-	client := &http.Client{Timeout: 2 * time.Second}
-
-	for time.Now().Before(deadline) {
-		resp, err := client.Get("http://127.0.0.1:8500/v1/status/leader")
-		if err == nil {
-			resp.Body.Close()
-			if resp.StatusCode == http.StatusOK {
-				return nil
-			}
-		}
-		time.Sleep(1 * time.Second)
-		fmt.Print(".")
-	}
-	fmt.Println()
-	return fmt.Errorf("timeout waiting for consul health")
-}
-

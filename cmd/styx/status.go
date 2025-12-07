@@ -67,18 +67,18 @@ func runStatus(cmd *cobra.Command, args []string) error {
 
 	client := &http.Client{Timeout: 2 * time.Second}
 
-	// Check Consul health
-	consulHealthy := false
-	resp, err := client.Get("http://127.0.0.1:8500/v1/status/leader")
-	if err != nil {
-		fmt.Println("Consul:      not responding")
-	} else {
+	// Check Vault health (only on servers)
+	resp, err := client.Get("http://127.0.0.1:8200/v1/sys/health")
+	if err == nil {
 		resp.Body.Close()
-		if resp.StatusCode == http.StatusOK {
-			fmt.Println("Consul:      healthy")
-			consulHealthy = true
+		if resp.StatusCode == 200 {
+			fmt.Println("Vault:       healthy (active)")
+		} else if resp.StatusCode == 429 {
+			fmt.Println("Vault:       healthy (standby)")
+		} else if resp.StatusCode == 503 {
+			fmt.Println("Vault:       sealed")
 		} else {
-			fmt.Println("Consul:      unhealthy")
+			fmt.Println("Vault:       not running")
 		}
 	}
 
@@ -147,30 +147,11 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Show Consul members if healthy
-	if consulHealthy {
-		resp, err = client.Get("http://127.0.0.1:8500/v1/agent/members")
-		if err == nil {
-			defer resp.Body.Close()
-			var consulMembers []struct {
-				Name   string `json:"Name"`
-				Addr   string `json:"Addr"`
-				Status int    `json:"Status"`
-			}
-			if err := json.NewDecoder(resp.Body).Decode(&consulMembers); err == nil && len(consulMembers) > 0 {
-				fmt.Println("\nConsul Members:")
-				for _, m := range consulMembers {
-					status := "alive"
-					if m.Status != 1 {
-						status = "failed"
-					}
-					fmt.Printf("  - %s (%s) [%s]\n", m.Name, m.Addr, status)
-				}
-			}
-		}
+	fmt.Println("\nNomad UI: http://127.0.0.1:4646")
+	if isServer {
+		fmt.Println("Vault UI: http://127.0.0.1:8200/ui")
 	}
-
-	fmt.Println("\nConsul UI: http://127.0.0.1:8500")
+	fmt.Println("Transport encryption: Tailscale WireGuard")
 
 	return nil
 }

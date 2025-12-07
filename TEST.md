@@ -115,63 +115,47 @@ styx init --server
 
 ---
 
-## Phase 3: Service Discovery ✓
+## Phase 3: Service Discovery
 
 ### Prerequisites
 - Phase 2 tests passing
-- Consul installed (`mise install consul` or `brew install consul`)
 
 ### Test Cases
 
-#### 3.1 Consul Agent Running ✓
-```bash
-consul members
-# Expected: Shows cluster members
-```
-
-#### 3.2 Service Registration ✓
+#### 3.1 Service Registration
 ```bash
 nomad job run example/nginx.nomad
-consul catalog services
+nomad service list
 # Expected: Shows nginx service
 ```
 
-#### 3.3 DNS Resolution ✓
+#### 3.2 Service Info
 ```bash
-dig @127.0.0.1 -p 8600 nginx.service.consul +short
-# Expected: Returns container IP (e.g., 192.168.64.x)
+nomad service info nginx
+# Expected: Shows service details with Tailscale hostname and port
 ```
 
-#### 3.4 KV Store ✓
+#### 3.3 Service Accessible
 ```bash
-consul kv put config/test "hello"
-consul kv get config/test
-# Expected: Returns "hello"
-```
-
-#### 3.5 Service Accessible via DNS ✓
-```bash
-curl http://nginx.service.consul:80/
+curl http://localhost:10080
 # Expected: Returns nginx welcome page
 ```
 
 ### Phase 3 Notes
 
-**Important**: For service DNS to work correctly:
-1. Services must be defined inside the `task` block (not group level)
-2. Services must use `address_mode = "driver"` to register with container IP
-3. The task driver returns `DriverNetwork` with the container's IPv4 address
-4. DNS resolver must be configured: `/etc/resolver/consul` with `nameserver 127.0.0.1` and `port 8600`
+**Nomad Native Service Discovery**:
+- Services use `provider = "nomad"` in job specs
+- Services registered with Nomad, not Consul
+- Use `nomad service list` and `nomad service info <name>` to query
 
 **Apple Container Networking**:
 - Containers get IPv4 addresses on 192.168.64.x subnet (vmnet)
-- Containers are reachable from host via container IP, NOT localhost
-- Port mapping (`-p 80:8080`) does NOT expose to localhost like Docker
-- Health checks disabled until Phase 4 (localhost can't reach container ports)
+- Containers are reachable from host via TCP proxy (not directly)
+- Port mapping uses host ports exposed via proxy
 
 ---
 
-## Phase 4: Networking ✓
+## Phase 4: Networking
 
 ### Prerequisites
 - Phase 3 tests passing
@@ -180,7 +164,7 @@ curl http://nginx.service.consul:80/
 
 ### Test Cases
 
-#### 4.1 Tailscale Detection ✓
+#### 4.1 Tailscale Detection
 ```bash
 # Build and reinitialize styx
 make build-all
@@ -188,36 +172,36 @@ styx stop && styx init --server
 # Expected: Shows "Tailscale connected: <hostname>.ts.net (<ip>)"
 ```
 
-#### 4.2 TCP Proxy Running ✓
+#### 4.2 TCP Proxy Running
 ```bash
 nomad job run example/nginx.nomad
 lsof -i :10080
 # Expected: Shows styx task driver listening on port 10080
 ```
 
-#### 4.3 Local Access via Proxy ✓
+#### 4.3 Local Access via Proxy
 ```bash
 curl http://localhost:10080
 # Expected: Returns nginx welcome page
 ```
 
-#### 4.4 Access via Tailscale Hostname ✓
+#### 4.4 Access via Tailscale Hostname
 ```bash
 curl http://fimbulwinter.panthera-frog.ts.net:10080
 # Expected: Returns nginx welcome page (replace with your hostname)
 ```
 
-#### 4.5 Health Check Working ✓
+#### 4.5 Health Check Working
 ```bash
-consul catalog services
+nomad service list
 nomad job status nginx | grep -A5 "Service Status"
 # Expected: Service shows as healthy
 ```
 
-#### 4.6 Service Registered with Tailscale Hostname ✓
+#### 4.6 Service Registered with Tailscale Hostname
 ```bash
-dig @127.0.0.1 -p 8600 nginx.service.consul +short
-# Expected: Returns Tailscale MagicDNS name (e.g., fimbulwinter.panthera-frog.ts.net)
+nomad service info nginx
+# Expected: Shows Tailscale MagicDNS hostname (e.g., fimbulwinter.panthera-frog.ts.net)
 ```
 
 #### 4.7 Cross-Node Communication
@@ -226,13 +210,10 @@ dig @127.0.0.1 -p 8600 nginx.service.consul +short
 styx init --server
 nomad job run example/nginx.nomad
 
-# On Mac B (styx): Join and access
+# On Mac B: Join and access
 styx join fimbulwinter.panthera-frog.ts.net
 curl http://fimbulwinter.panthera-frog.ts.net:10080
 # Expected: Returns nginx welcome page
-
-curl http://nginx.service.consul:10080
-# Expected: Returns nginx welcome page via Consul DNS
 ```
 
 ### Phase 4 Notes
@@ -253,10 +234,11 @@ network {
 
 task "myapp" {
   config {
-    ports = ["80:10080"]  # containerPort:hostPort
+    ports = ["10080:80"]  # hostPort:containerPort
   }
   service {
-    address_mode = "driver"  # Uses Tailscale hostname
+    provider     = "nomad"    # Nomad native service discovery
+    address_mode = "driver"   # Uses Tailscale hostname
     check {
       type = "tcp"
       port = "http"  # Works via proxy
@@ -267,7 +249,7 @@ task "myapp" {
 
 ---
 
-## Phase 5: Security ✓
+## Phase 5: Security
 
 ### Prerequisites
 - Phase 4 tests passing
@@ -275,54 +257,20 @@ task "myapp" {
 
 ### Test Cases
 
-#### 5.1 TLS for Consul API ✓
+#### 5.1 Vault Running (Server Mode)
 ```bash
-# Reinitialize with TLS (now always enabled)
 styx stop && styx init --server
-
-# HTTP still works (for backward compat)
-curl http://127.0.0.1:8500/v1/status/leader
-# Expected: Returns cluster leader
-
-# HTTPS works
-curl -k https://127.0.0.1:8501/v1/status/leader
-# Expected: Returns cluster leader
-
-# Verify TLS is configured
-consul info | grep encrypt
-# Expected: Shows "encrypt = true"
-```
-
-#### 5.2 Gossip Encryption ✓
-```bash
-# Check gossip encryption is enabled
-consul info | grep encrypt
-# Expected: Shows "encrypt = true"
-
-# Key file exists
-ls ~/.styx/secrets/gossip.key
-# Expected: File exists
-```
-
-#### 5.3 Certificate Generation ✓
-```bash
-# Check certificates exist
-ls ~/.styx/certs/
-# Expected: consul-agent-ca.pem, dc1-server-consul-*.pem, dc1-server-consul-*-key.pem
-```
-
-#### 5.4 Vault Running (Server Mode) ✓
-```bash
 vault status
 # Expected: Shows initialized and unsealed
 # "Sealed: false"
+# "Storage Type: raft"
 
 # Root token saved
 cat ~/.styx/secrets/vault-init.json
 # Expected: Contains unseal_keys_b64 and root_token
 ```
 
-#### 5.5 Vault KV Store ✓
+#### 5.2 Vault KV Store
 ```bash
 # Set VAULT_ADDR
 export VAULT_ADDR=http://127.0.0.1:8200
@@ -339,23 +287,23 @@ vault kv get secret/nginx
 # Expected: Shows api_key and db_password
 ```
 
-#### 5.6 Nomad-Vault Integration ✓
+#### 5.3 Nomad-Vault Integration
 ```bash
-# Verify Nomad token exists
-cat ~/.styx/secrets/nomad-vault-token
-# Expected: Shows Vault token for Nomad
+# Verify Nomad has Vault configured
+nomad agent-info | grep -A5 vault
+# Expected: Shows vault configuration
 
 # Policy exists
-vault policy read nomad-server
+vault policy read nomad-workloads
 # Expected: Shows policy allowing secret access
 ```
 
-#### 5.7 Job with Vault Secrets ✓
+#### 5.4 Job with Vault Secrets
 ```bash
 # First create the secret
 export VAULT_ADDR=http://127.0.0.1:8200
 export VAULT_TOKEN=$(cat ~/.styx/secrets/vault-init.json | jq -r '.root_token')
-vault kv put secret/nginx api_key=test123 db_password=secret456
+vault kv put secret/data/nginx api_key=test123 db_password=secret456
 
 # Run job that uses Vault secrets
 nomad job run example/nginx-vault.nomad
@@ -366,40 +314,17 @@ nomad alloc logs <alloc-id>
 # Expected: No template rendering errors
 ```
 
-#### 5.8 Client Join with TLS
-```bash
-# On server (Mac A)
-styx stop && styx init --server
-
-# Copy CA and gossip key to client (Mac B)
-scp ~/.styx/certs/consul-agent-ca.pem macb:~/.styx/certs/
-scp ~/.styx/secrets/gossip.key macb:~/.styx/secrets/
-
-# On client (Mac B)
-styx join <server-tailscale-ip>
-# Expected: Joins cluster with TLS
-
-# Verify cluster membership
-consul members
-# Expected: Shows both nodes
-```
-
 ### Phase 5 Notes
 
-**Consul Connect Limitation**:
-- Consul Connect sidecars do NOT work on macOS (requires Linux CNI bridge networking)
-- See: https://github.com/hashicorp/nomad/issues/12917
-- Alternative: Tailscale provides WireGuard encryption for all inter-node traffic
-
 **Security Model**:
-- TLS for Nomad/Consul APIs - protects control plane
-- Gossip encryption for Consul - protects cluster communication
-- Vault for secrets - protects sensitive data in jobs
-- Tailscale for transport - encrypts all inter-node traffic
+- Vault for secrets - protects sensitive data in jobs (Raft storage, no external dependencies)
+- Tailscale for transport - encrypts all inter-node traffic via WireGuard
+- Nomad workload identities (JWT auth) for Vault integration
 
-**Certificate Distribution**:
-- CA and gossip key must be manually copied from server to clients
-- Client certs are generated locally using the shared CA
+**Vault Storage**:
+- Uses integrated Raft storage (no Consul dependency)
+- Auto-initialized with 1 unseal key for simplicity
+- Production deployments should use 5 shares, 3 threshold
 
 ---
 
@@ -407,22 +332,27 @@ consul members
 
 ### Test Cases
 
-#### 6.1 Olric Cache
+#### 6.1 Dragonfly Cache
 ```bash
-nomad job run jobs/olric.nomad
-# Test cache operations from container
+nomad job run example/dragonfly.nomad
+nomad service list
+# Expected: Shows dragonfly service
+
+# Test Redis-compatible operations
+redis-cli -p 16379 SET test "hello"
+redis-cli -p 16379 GET test
+# Expected: Returns "hello"
 ```
 
 #### 6.2 NATS Queue
 ```bash
-nomad job run jobs/nats.nomad
-# Test pub/sub from containers
-```
+nomad job run example/nats.nomad
+nomad service list
+# Expected: Shows nats service
 
-#### 6.3 SeaweedFS Storage
-```bash
-nomad job run jobs/seaweedfs.nomad
-# Test S3-compatible operations
+# Check health endpoint
+curl http://localhost:18222/healthz
+# Expected: Returns ok
 ```
 
 ---

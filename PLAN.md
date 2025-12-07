@@ -43,14 +43,16 @@
 ## Phase 3: Service Discovery ✓
 **Goal**: Services find each other
 
-- [x] Add Consul to the stack
-- [x] Consul DNS for service names
-- [x] Consul KV for configuration
-- [x] Health checks in Consul (disabled until Phase 4 networking)
-- [x] Task driver returns DriverNetwork with container IP
-- [x] Service registration with container IP via `address_mode = "driver"`
+- [x] Nomad native service discovery (`provider = "nomad"`)
+- [x] Services registered with Tailscale DNS names
+- [x] Health checks via Nomad
+- [x] Task driver returns DriverNetwork with Tailscale hostname
+- [x] Service registration with `address_mode = "driver"`
 
-**Deliverable**: `curl http://myservice.service.consul` works (COMPLETE)
+**Note**: Using Nomad native service discovery instead of Consul.
+Services are accessed via Tailscale MagicDNS (hostname.ts.net:port).
+
+**Deliverable**: Services discoverable via `nomad service list` (COMPLETE)
 
 ---
 
@@ -71,16 +73,14 @@
 ## Phase 5: Security ✓
 **Goal**: Secure communication and secrets
 
-- [x] TLS for Nomad/Consul APIs (always enabled)
-- [x] Gossip encryption for Consul cluster
-- [x] Vault integration for secrets (server mode only)
-- [x] Certificate generation using Consul CLI
-- [~] Consul Connect for mTLS (NOT SUPPORTED on macOS - sidecars require Linux CNI)
+- [x] Vault integration for secrets (server mode only, Raft storage)
+- [x] Vault-Nomad integration via workload identities (JWT auth)
+- [x] Tailscale WireGuard for transport encryption
 
-**Note**: Consul Connect sidecars don't work on macOS due to Linux CNI bridge networking requirement.
-Tailscale provides encrypted transport between nodes. Consul intentions can be used for authorization policy.
+**Note**: Tailscale provides encrypted transport between all nodes via WireGuard.
+No additional TLS or gossip encryption needed when all nodes are on the same Tailnet.
 
-**Deliverable**: TLS for APIs, Vault for secrets, Tailscale for transport encryption (COMPLETE)
+**Deliverable**: Vault for secrets, Tailscale for transport encryption (COMPLETE)
 
 ---
 
@@ -100,9 +100,11 @@ Tailscale provides encrypted transport between nodes. Consul intentions can be u
 **Goal**: External traffic reaches services
 
 - [ ] Deploy Traefik as Nomad job
-- [ ] Consul Catalog integration (auto-discovery)
+- [ ] Nomad provider integration (reads from Nomad service catalog)
 - [ ] TLS termination
 - [ ] Load balancing across replicas
+
+**Note**: Traefik will use Nomad provider directly (no Consul needed).
 
 **Deliverable**: External requests routed to correct service
 
@@ -148,17 +150,16 @@ Tailscale provides encrypted transport between nodes. Consul intentions can be u
 |-----------|----------|-------|
 | Orchestration | Nomad | 1 |
 | Container Runtime | Apple `container` CLI | 1 |
-| Service Discovery | Consul | 3 |
-| KV/Config | Consul KV | 3 |
-| DNS | Consul DNS | 3 |
+| Service Discovery | Nomad Native | 3 |
+| DNS | Tailscale MagicDNS | 4 |
 | Networking | Tailscale | 4 |
-| mTLS | Consul Connect | 5 |
-| Secrets | Vault | 5 |
+| Transport Encryption | Tailscale WireGuard | 5 |
+| Secrets | Vault (Raft storage) | 5 |
 | Cache | Dragonfly | 6 |
 | Queue | NATS | 6 |
 | Storage | Deferred (see Notes) | 6 |
-| Ingress | Traefik | 7 |
-| Load Balancing | Traefik + Consul | 7 |
+| Ingress | Traefik (Nomad Provider) | 7 |
+| Load Balancing | Traefik | 7 |
 | Logging | Loki | 8 |
 | Metrics | Prometheus | 8 |
 | Tracing | Jaeger (optional) | 8 |
@@ -171,17 +172,27 @@ Tailscale provides encrypted transport between nodes. Consul intentions can be u
 
 ### Design Principles
 
-- **No Sudo**: Styx never requires sudo. All data in `~/Library/Application Support/styx/`, uses launchd user agents. Features requiring sudo (like Consul DNS resolver) are optional and documented for manual setup.
+- **No Sudo**: Styx never requires sudo. All data in `~/.styx/`, uses launchd user agents.
+- **Tailscale-First**: All networking goes through Tailscale. Transport encryption handled by WireGuard.
+- **Simplified Stack**: Removed Consul in favor of Nomad native service discovery + Tailscale DNS.
 
-### Phase 3 Discoveries
+### Architecture Simplification (Dec 2025)
 
-- Apple Containers get IPv4 addresses on the 192.168.64.x subnet (vmnet)
-- Containers are reachable from the host via their container IP, not localhost
-- Port mapping (`-p 80:8080`) doesn't expose ports to localhost like Docker
-- The task driver must return `DriverNetwork` with the container's IP for proper service registration
-- Services must use `address_mode = "driver"` and be defined inside the task block
-- Health checks will fail until Phase 4 networking because localhost can't reach containers
-- **Consul DNS**: Direct queries work (`dig @127.0.0.1 -p 8600 nginx.service.consul`), but system-wide `.service.consul` resolution requires manual sudo setup of `/etc/resolver/consul` - this is optional since services are accessible via Tailscale IPs
+Removed Consul, TLS certificates, and gossip encryption in favor of simpler architecture:
+- **Before**: Nomad + Consul + Vault (Consul backend) + TLS + Gossip + Bootstrap Server
+- **After**: Nomad + Vault (Raft backend) + Tailscale
+
+**Rationale**:
+- Tailscale already provides WireGuard encryption for all inter-node traffic
+- Tailscale MagicDNS provides hostname resolution
+- Nomad native service discovery works without Consul
+- Vault Raft storage eliminates Consul dependency
+
+### Phase 3 Notes (Simplified)
+
+- Services use `provider = "nomad"` for Nomad native service discovery
+- Services accessible via Tailscale hostname + port (e.g., `hostname.ts.net:10080`)
+- Port convention: hostPort = containerPort + 10000 (e.g., 80 → 10080)
 
 ### Phase 4 Discoveries
 
@@ -189,37 +200,26 @@ Tailscale provides encrypted transport between nodes. Consul intentions can be u
 - Solution: TCP proxy in task driver bridges Tailscale → container network
 - Port mapping convention: hostPort = containerPort + 10000 (e.g., 80 → 10080)
 - Task driver returns Tailscale MagicDNS hostname (e.g., `fimbulwinter.panthera-frog.ts.net`) in DriverNetwork
-- Services registered in Consul with Tailscale hostname, accessible from any node on the tailnet
-- Health checks work now because they connect via host port proxy
-- Tailscale MagicDNS resolves machine names; Consul DNS resolves service names
+- Services registered with Tailscale hostname, accessible from any node on the tailnet
 
-### Phase 5 Discoveries
+### Phase 5 Notes (Simplified)
 
-- **Consul Connect sidecars do NOT work on macOS** - they require Linux CNI bridge networking (GitHub Issue #12917)
-- Alternative security model: Tailscale already encrypts all inter-node traffic (WireGuard), so we add TLS for APIs + Vault
-- TLS certificates generated using Consul's built-in CA: `consul tls ca create`, `consul tls cert create`
-- Gossip encryption key generated with `consul keygen` and stored in secrets directory
-- For client nodes joining: CA and gossip key must be manually copied from server (secure distribution)
-- Vault deployed as launchd service (not Nomad job) to avoid chicken-and-egg problem
-- Vault uses Consul storage backend for HA
+- Vault uses integrated Raft storage (no external dependencies)
 - Vault auto-initialized with 1 unseal key for simplicity (production would use 5 shares, 3 threshold)
-- Nomad-Vault integration creates policy and token role for job secrets access
-- Consul intentions can be used for service authorization (without sidecar enforcement)
+- Nomad-Vault integration uses workload identities (JWT auth) for secure, short-lived tokens
+- No TLS certificates needed - Tailscale WireGuard handles encryption
 
 ### Phase 6 Discoveries
 
 - **Olric doesn't support ARM64** - Docker images are linux/amd64 only. Replaced with Dragonfly (Redis-compatible)
-- **Dragonfly requires explicit memory config** - Apple Containers don't isolate memory like Docker. Must pass `--maxmemory=1gb` to prevent Dragonfly from reading system memory and exiting
-- **NATS works well** - Simple deployment, cluster discovery via Consul DNS, HTTP monitoring at port 18222
-- Port convention: hostPort = containerPort + 10000 (e.g., Redis 6379 → 16379, NATS 4222 → 14222)
-- For single-node testing, hardcoded Tailscale IPs work. Multi-node requires dynamic DNS resolution
+- **Dragonfly requires explicit memory config** - Must pass `--maxmemory=1gb` to prevent reading system memory
+- **NATS works well** - Simple deployment, HTTP monitoring at port 18222
 
 #### S3-Compatible Storage (Deferred)
 
 All evaluated options had significant issues for Apple Containers:
+- **SeaweedFS**: Complex multi-component architecture, gRPC port issues
+- **MinIO**: Deprecated in 2025, entered maintenance mode
+- **Garage**: Requires TOML config file, more setup complexity
 
-- **SeaweedFS**: Complex multi-component architecture (master, volume, filer). gRPC port calculation issues (uses HTTP port + 10000 internally). Volume servers couldn't properly advertise reachable addresses.
-- **MinIO**: Effectively deprecated in 2025. Admin UI removed from Community Edition (May 2025), stopped publishing free Docker images (Oct 2025), entered "maintenance mode" (Dec 2025). Not recommended for new deployments.
-- **Garage**: Requires TOML config file at `/etc/garage.toml`, not just environment variables. More setup complexity for containerized deployment.
-
-Recommendation: Revisit when a simpler S3-compatible solution emerges, or use cloud object storage (S3, GCS, R2) if needed.
+Recommendation: Use cloud object storage (S3, GCS, R2) if needed.

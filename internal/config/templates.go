@@ -2,6 +2,7 @@ package config
 
 // ServerConfigTemplate is the HCL template for a Nomad server node.
 // Server nodes participate in consensus and can also run workloads.
+// Transport encryption is handled by Tailscale (no TLS/Consul needed).
 const ServerConfigTemplate = `data_dir  = "{{.DataDir}}"
 bind_addr = "0.0.0.0"
 
@@ -31,20 +32,6 @@ plugin "apple-container" {
   }
 }
 
-consul {
-  address = "127.0.0.1:8500"
-}
-
-# TLS Configuration - RPC only (HTTP uses Tailscale for transport security)
-tls {
-  http = false
-  rpc  = true
-  ca_file   = "{{.CAFile}}"
-  cert_file = "{{.CertFile}}"
-  key_file  = "{{.KeyFile}}"
-  verify_server_hostname = true
-}
-
 # Vault Integration with Workload Identity
 vault {
   enabled = true
@@ -62,6 +49,7 @@ vault {
 
 // ClientConfigTemplate is the HCL template for a Nomad client node.
 // Client nodes only run workloads and connect to server(s) for scheduling.
+// Transport encryption is handled by Tailscale (no TLS/Consul needed).
 const ClientConfigTemplate = `data_dir  = "{{.DataDir}}"
 bind_addr = "0.0.0.0"
 
@@ -84,34 +72,6 @@ plugin_dir = "{{.PluginDir}}"
 plugin "apple-container" {
   config {
     container_bin_path = "/usr/local/bin/container"
-  }
-}
-
-consul {
-  address = "127.0.0.1:8500"
-}
-
-# TLS Configuration - RPC only (HTTP uses Tailscale for transport security)
-tls {
-  http = false
-  rpc  = true
-  ca_file   = "{{.CAFile}}"
-  cert_file = "{{.CertFile}}"
-  key_file  = "{{.KeyFile}}"
-  verify_server_hostname = true
-}
-
-# Vault Integration with Workload Identity
-vault {
-  enabled = true
-  address = "http://127.0.0.1:8200"
-
-  # Workload identity configuration for Nomad 1.7+
-  default_identity {
-    aud  = ["vault.io"]
-    env  = false
-    file = true
-    ttl  = "1h"
   }
 }
 `

@@ -12,8 +12,8 @@ Styx is a distributed system platform for Mac fleets using Apple Containers and 
 - `TEST.md` - Testing requirements for each phase (run after completing a phase)
 - `driver/` - Nomad task driver for Apple Containers
 - `cmd/styx/` - Main CLI launcher (`styx init`, `styx join`, `styx stop`)
-- `internal/` - Internal packages (config, launchd, network)
-- `example/` - Sample Nomad job specs for testing (alpine, nginx, ubuntu)
+- `internal/` - Internal packages (config, launchd, network, proxy, vault)
+- `example/` - Sample Nomad job specs for testing (alpine, nginx, ubuntu, nats, dragonfly)
 
 ## Directory Structure
 
@@ -28,11 +28,10 @@ styx/
 │   └── version.go      # styx version
 ├── driver/             # Nomad task driver plugin
 ├── internal/
-│   ├── config/         # Nomad/Consul/Vault HCL config generation
+│   ├── config/         # Nomad/Vault HCL config generation
 │   ├── launchd/        # macOS launchd plist management
 │   ├── network/        # IP detection and Tailscale utilities
 │   ├── proxy/          # TCP proxy for container port forwarding
-│   ├── tls/            # TLS certificate generation using Consul
 │   └── vault/          # Vault initialization and setup helpers
 ├── example/            # Sample Nomad job specs
 ├── plugins/            # Built plugin binary
@@ -61,7 +60,7 @@ styx/
 
 - Don't worry about backwards compatibility for existing installations
 - Features should always be enabled (no optional flags for core functionality)
-- TLS, Vault, and security features are always on
+- Vault and security features are always on
 - Breaking changes are acceptable - this is a development project
 
 ### No Sudo
@@ -69,19 +68,16 @@ styx/
 - Styx must never require sudo to run
 - All data stored in user directories (`~/.styx/`)
 - Uses launchd user agents (not system daemons)
-- Consul DNS for `.service.consul` resolution requires manual sudo setup (optional, documented below)
 
 ### Prefer Modern Approaches
 
-When implementing features with HashiCorp tools (Nomad, Consul, Vault), always use the latest/modern approaches:
+When implementing features with HashiCorp tools (Nomad, Vault), always use the latest/modern approaches:
 
 - **Vault + Nomad**: Use workload identities (JWT auth) instead of legacy token-based auth (Nomad 1.7+)
-- **TLS Certificates**: Generate separate certificates for each service (Nomad certs, Consul certs) - don't reuse
-- **Consul Connect**: Note that sidecars don't work on macOS - use Tailscale for transport encryption
+- **Vault Storage**: Use Raft (integrated storage) instead of Consul backend
+- **Service Discovery**: Use Nomad native (`provider = "nomad"`) instead of Consul
 - **Authentication**: Prefer short-lived tokens over long-lived static tokens
-- **Service Discovery**: Use `address_mode = "driver"` for container services to register container IPs
-
-When encountering a choice between legacy and modern approaches, always choose modern unless there's a specific macOS/Apple Silicon limitation.
+- **Service Registration**: Use `address_mode = "driver"` for container services to register Tailscale hostnames
 
 ### When Starting a Phase
 
@@ -112,15 +108,13 @@ The user uses **mise** to install and manage package versions. When a tool needs
 - CLI framework: `github.com/spf13/cobra`
 - Container runtime: `/usr/local/bin/container` (Apple's CLI)
 - Nomad: `mise install nomad` or `brew install nomad`
-- Consul: `mise install consul` or `brew install consul`
 - Vault: `mise install vault` or `brew install vault`
-- Tailscale: https://tailscale.com/download (for cross-node networking)
+- Tailscale: https://tailscale.com/download (for cross-node networking and encryption)
 
 ### Running Commands
 
-- **Nomad**: Run `nomad` commands directly without environment variables (no NOMAD_ADDR, NOMAD_SKIP_VERIFY needed)
+- **Nomad**: Run `nomad` commands directly without environment variables
 - **Styx**: Run `./bin/styx` commands directly without sudo
-- **Consul**: Run `consul` commands directly
 - **Vault**: Run `vault` commands directly
 
 ### Testing
@@ -138,16 +132,15 @@ The user uses **mise** to install and manage package versions. When a tool needs
 3. Add checkmark to phase header in PLAN.md (e.g., `## Phase 1: Foundation ✓`)
 4. Commit changes
 
-### Optional: Consul DNS for .service.consul Resolution
+### Architecture Notes
 
-By default, `.service.consul` names are only resolvable via direct Consul DNS queries (`dig @127.0.0.1 -p 8600`).
-For system-wide resolution (so apps can use `curl http://nginx.service.consul`), users must manually set up:
+**Simplified Stack**: Styx uses Nomad + Vault + Tailscale (no Consul):
+- **Orchestration**: Nomad schedules and runs containers
+- **Secrets**: Vault with Raft storage provides secret management
+- **Networking**: Tailscale handles cross-node communication and WireGuard encryption
+- **Service Discovery**: Nomad native service discovery (`provider = "nomad"`)
+- **DNS**: Tailscale MagicDNS for hostname resolution
 
-```bash
-sudo mkdir -p /etc/resolver
-sudo tee /etc/resolver/consul <<< "nameserver 127.0.0.1
-port 8600"
-```
-
-This is optional - services work fine via Tailscale IPs without it. Health checks and service-to-service
-communication use direct Consul DNS queries and don't require this setup.
+**Port Convention**: Container ports are mapped to host ports at containerPort + 10000:
+- Container port 80 → Host port 10080
+- Container port 6379 → Host port 16379

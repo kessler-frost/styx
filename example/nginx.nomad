@@ -25,8 +25,9 @@ job "nginx" {
       }
 
       service {
-        name = "nginx"
-        port = "http"
+        name         = "nginx"
+        provider     = "nomad"  # Nomad native service discovery
+        port         = "http"
         address_mode = "driver"  # Uses Tailscale hostname from DriverNetwork
 
         check {

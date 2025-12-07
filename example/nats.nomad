@@ -31,9 +31,10 @@ job "nats" {
       config {
         image = "nats:latest"
         ports = ["14222:4222", "16222:6222", "18222:8222"]
+        # Note: For multi-node clustering, use Nomad template to resolve service addresses
+        # or configure static routes via Tailscale hostnames
         args  = [
           "-cluster", "nats://0.0.0.0:6222",
-          "-routes", "nats://nats-cluster.service.consul:16222",
           "-http_port", "8222",
           "-cluster_name", "styx-nats"
         ]
@@ -47,6 +48,7 @@ job "nats" {
       # Client connection service
       service {
         name         = "nats"
+        provider     = "nomad"  # Nomad native service discovery
         port         = "client"
         address_mode = "driver"
 
@@ -62,6 +64,7 @@ job "nats" {
       # Cluster routing service (for inter-node discovery)
       service {
         name         = "nats-cluster"
+        provider     = "nomad"  # Nomad native service discovery
         port         = "cluster"
         address_mode = "driver"
       }
@@ -69,6 +72,7 @@ job "nats" {
       # Monitoring service
       service {
         name         = "nats-monitor"
+        provider     = "nomad"  # Nomad native service discovery
         port         = "monitor"
         address_mode = "driver"
       }
