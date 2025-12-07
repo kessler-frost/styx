@@ -443,18 +443,100 @@ NOMAD_ADDR=https://127.0.0.1:4646 NOMAD_SKIP_VERIFY=true nomad job stop nginx-tr
 
 ## Phase 8: Observability
 
+### Prerequisites
+- Styx server running with `styx init --serve`
+- Phase 7 (Ingress) working
+
 ### Test Cases
 
-#### 8.1 Logs Available
+#### 8.1 Observability Services Running
 ```bash
-nomad alloc logs <alloc-id>
-# Expected: Container logs displayed
+styx services
+# Expected: All services show [running]:
+#   - prometheus
+#   - loki
+#   - grafana
+#   - promtail
+#   - traefik
+#   - nats
+#   - dragonfly
 ```
 
-#### 8.2 Metrics Collection
+#### 8.2 Prometheus Targets
 ```bash
-# TBD - Prometheus/Loki setup
+curl -s http://localhost:9090/prometheus/api/v1/targets | jq '.data.activeTargets[] | {job: .labels.job, health: .health}'
+# Expected: All targets show health: "up"
+#   - nomad
+#   - prometheus
+#   - traefik-metrics (via Nomad SD)
 ```
+
+#### 8.3 Prometheus Metrics Query
+```bash
+curl -s 'http://localhost:9090/prometheus/api/v1/query?query=up' | jq '.data.result[] | {job: .metric.job, value: .value[1]}'
+# Expected: All jobs show value: "1"
+```
+
+#### 8.4 Traefik Metrics Endpoint
+```bash
+curl -s http://localhost:8082/metrics | head -5
+# Expected: Prometheus format metrics
+```
+
+#### 8.5 Grafana Accessible
+```bash
+curl -s http://localhost:4200/grafana/api/health
+# Expected: {"commit":"...","database":"ok","version":"..."}
+```
+
+#### 8.6 Grafana Datasources
+```bash
+curl -s http://localhost:4200/grafana/api/datasources | jq '.[].name'
+# Expected: "Prometheus" and "Loki"
+```
+
+#### 8.7 Loki Ready
+```bash
+curl -s http://localhost:3100/ready
+# Expected: "ready"
+```
+
+#### 8.8 Nomad Metrics Endpoint
+```bash
+curl -s 'http://localhost:4646/v1/metrics?format=prometheus' | grep -c nomad_
+# Expected: > 0 (many Nomad metrics)
+```
+
+#### 8.9 Nomad Logs via CLI
+```bash
+# Get any running allocation
+ALLOC=$(NOMAD_ADDR=https://127.0.0.1:4646 NOMAD_SKIP_VERIFY=true nomad job allocs prometheus -json | jq -r '.[0].ID')
+NOMAD_ADDR=https://127.0.0.1:4646 NOMAD_SKIP_VERIFY=true nomad alloc logs $ALLOC
+# Expected: Prometheus startup logs
+```
+
+#### 8.10 Prometheus via Traefik
+```bash
+curl -s http://localhost:4200/prometheus/api/v1/status/config | jq '.status'
+# Expected: "success"
+```
+
+### Phase 8 Notes
+
+**Architecture**:
+- Prometheus, Loki, Grafana run only on server nodes (`node.class = "server"`)
+- Promtail runs on ALL nodes as a system job to ship logs
+- Prometheus auto-discovers services tagged with `prometheus.scrape=true`
+
+**Endpoints** (via Traefik at localhost:4200):
+- Grafana: `/grafana`
+- Prometheus: `/prometheus`
+
+**Direct Access**:
+- Prometheus: `http://localhost:9090`
+- Loki: `http://localhost:3100`
+- Grafana: `http://localhost:3000`
+- Traefik metrics: `http://localhost:8082/metrics`
 
 ---
 

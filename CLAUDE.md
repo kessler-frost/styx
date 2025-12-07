@@ -12,8 +12,8 @@ Styx unites your Mac devices into a cohesive fleet for running workloads at any 
 - `TEST.md` - Testing requirements for each phase (run after completing a phase)
 - `driver/` - Nomad task driver for Apple Containers
 - `cmd/styx/` - Main CLI launcher (`styx`, `styx -y`, `styx <ip>`, `styx stop`)
-- `internal/` - Internal packages (config, launchd, network, proxy, vault)
-- `example/` - Sample Nomad job specs for testing (alpine, nginx, ubuntu, nats, dragonfly)
+- `internal/` - Internal packages (config, launchd, network, services, tailserve, vault)
+- `example/` - Sample Nomad job specs for testing (alpine, nginx, ubuntu, nginx-vault, nats, dragonfly, nginx-traefik)
 
 ## Directory Structure
 
@@ -22,8 +22,9 @@ styx/
 ├── cmd/styx/           # CLI commands
 │   ├── main.go         # Entry point
 │   ├── root.go         # Root command with global flags
-│   ├── init.go         # Server initialization logic
-│   ├── join.go         # Client join logic
+│   ├── init.go         # Server/client initialization (handles --serve and auto-join)
+│   ├── services.go     # Platform services management
+│   ├── status.go       # styx status
 │   ├── stop.go         # styx stop
 │   └── version.go      # styx version
 ├── driver/             # Nomad task driver plugin
@@ -31,7 +32,8 @@ styx/
 │   ├── config/         # Nomad/Vault HCL config generation
 │   ├── launchd/        # macOS launchd plist management
 │   ├── network/        # IP detection and Tailscale utilities
-│   ├── proxy/          # TCP proxy for container port forwarding
+│   ├── services/       # Platform services (NATS, Dragonfly, Traefik, observability)
+│   ├── tailserve/      # Tailscale Serve integration
 │   └── vault/          # Vault initialization and setup helpers
 ├── example/            # Sample Nomad job specs
 ├── plugins/            # Built plugin binary
@@ -153,7 +155,11 @@ When implementing plans with multiple independent tasks:
 **Port Convention**: Platform services use standard ports where possible:
 - NATS: 4222 (client), 6222 (cluster), 8222 (monitor)
 - Dragonfly: 6379 (Redis-compatible)
-- Traefik: 4200 (HTTP ingress), 4201 (dashboard)
+- Traefik: 4200 (HTTP ingress), 4201 (dashboard), 8082 (metrics)
+- Prometheus: 9090 (routed via Traefik at `/prometheus`)
+- Loki: 3100 (internal, receives logs from Promtail)
+- Grafana: 3000 (routed via Traefik at `/grafana`)
+- Promtail: 9080 (agent metrics)
 
 **Prometheus Metrics**: To add metrics scraping for a new service, add the tag:
 ```hcl

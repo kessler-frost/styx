@@ -63,10 +63,10 @@ Services are accessed via Tailscale MagicDNS (hostname.ts.net:port).
 **Goal**: Containers communicate across Macs via Tailscale
 
 - [x] Tailscale detection utility (`internal/network/tailscale.go`)
-- [x] TCP proxy for port forwarding (`internal/proxy/tcp.go`)
-- [x] Task driver starts proxies and returns Tailscale hostname
+- [x] Native port forwarding via container `-p` flag
+- [x] Task driver returns Tailscale hostname in DriverNetwork
 - [x] Services registered with Tailscale MagicDNS names
-- [x] Health checks now work via host port proxy
+- [x] Health checks work via host port mapping
 - [x] init/join commands show Tailscale status
 
 **Deliverable**: Container on Mac A talks to container on Mac B (COMPLETE)
@@ -123,7 +123,7 @@ Path-based routing by default: services at `https://hostname.ts.net/<service-nam
 
 ---
 
-## Phase 8: Observability
+## Phase 8: Observability ✓
 **Goal**: See what's happening
 
 - [x] Add telemetry block to Nomad config for metrics endpoint
@@ -136,12 +136,12 @@ Path-based routing by default: services at `https://hostname.ts.net/<service-nam
 - [x] Register observability services in platform services
 - [x] Update CLI to show new endpoints
 - [x] Test metrics collection from Nomad, Traefik
-- [~] Test log collection from container allocations
+- [x] Test log collection from container allocations
 
 **Note**: Prometheus uses Nomad Service Discovery to auto-discover services tagged with
 `prometheus.scrape=true`. NATS metrics require a separate exporter (not included).
 
-**Deliverable**: Logs, metrics, dashboards via Grafana
+**Deliverable**: Logs, metrics, dashboards via Grafana (COMPLETE)
 
 ---
 
