@@ -79,15 +79,15 @@ Tailscale provides encrypted transport between nodes. Consul intentions can be u
 
 ---
 
-## Phase 6: Distributed Primitives
+## Phase 6: Distributed Primitives ✓
 **Goal**: Cache, queue, storage available to services
 
-- [ ] Deploy Olric as Nomad job (distributed cache)
-- [ ] Deploy NATS as Nomad job (message queue)
-- [ ] Deploy SeaweedFS as Nomad job (distributed storage)
-- [ ] Example client libraries/configs
+- [x] Deploy NATS as Nomad job (message queue)
+- [x] Deploy Dragonfly as Nomad job (Redis-compatible cache, replaced Olric which lacks ARM64)
+- [ ] Deploy S3-compatible storage (deferred - see Notes)
+- [x] Example Go client for Dragonfly (`example/test-dragonfly/`)
 
-**Deliverable**: Services can use redis:// nats:// s3:// endpoints
+**Deliverable**: Services can use redis:// nats:// endpoints (COMPLETE - s3:// deferred)
 
 ---
 
@@ -149,9 +149,9 @@ Tailscale provides encrypted transport between nodes. Consul intentions can be u
 | Networking | Tailscale | 4 |
 | mTLS | Consul Connect | 5 |
 | Secrets | Vault | 5 |
-| Cache | Olric | 6 |
+| Cache | Dragonfly | 6 |
 | Queue | NATS | 6 |
-| Storage | SeaweedFS | 6 |
+| Storage | Deferred (see Notes) | 6 |
 | Ingress | Traefik | 7 |
 | Load Balancing | Traefik + Consul | 7 |
 | Logging | Loki | 8 |
@@ -196,3 +196,21 @@ Tailscale provides encrypted transport between nodes. Consul intentions can be u
 - Vault auto-initialized with 1 unseal key for simplicity (production would use 5 shares, 3 threshold)
 - Nomad-Vault integration creates policy and token role for job secrets access
 - Consul intentions can be used for service authorization (without sidecar enforcement)
+
+### Phase 6 Discoveries
+
+- **Olric doesn't support ARM64** - Docker images are linux/amd64 only. Replaced with Dragonfly (Redis-compatible)
+- **Dragonfly requires explicit memory config** - Apple Containers don't isolate memory like Docker. Must pass `--maxmemory=1gb` to prevent Dragonfly from reading system memory and exiting
+- **NATS works well** - Simple deployment, cluster discovery via Consul DNS, HTTP monitoring at port 18222
+- Port convention: hostPort = containerPort + 10000 (e.g., Redis 6379 → 16379, NATS 4222 → 14222)
+- For single-node testing, hardcoded Tailscale IPs work. Multi-node requires dynamic DNS resolution
+
+#### S3-Compatible Storage (Deferred)
+
+All evaluated options had significant issues for Apple Containers:
+
+- **SeaweedFS**: Complex multi-component architecture (master, volume, filer). gRPC port calculation issues (uses HTTP port + 10000 internally). Volume servers couldn't properly advertise reachable addresses.
+- **MinIO**: Effectively deprecated in 2025. Admin UI removed from Community Edition (May 2025), stopped publishing free Docker images (Oct 2025), entered "maintenance mode" (Dec 2025). Not recommended for new deployments.
+- **Garage**: Requires TOML config file at `/etc/garage.toml`, not just environment variables. More setup complexity for containerized deployment.
+
+Recommendation: Revisit when a simpler S3-compatible solution emerges, or use cloud object storage (S3, GCS, R2) if needed.
