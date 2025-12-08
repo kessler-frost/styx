@@ -113,6 +113,16 @@ The user uses **mise** to install and manage package versions. When a tool needs
 - Vault: `mise install vault` or `brew install vault`
 - Tailscale: https://tailscale.com/download (for cross-node networking and encryption)
 
+### Apple Container CLI
+
+The Apple Container CLI (`/usr/local/bin/container`) has its own credential store, separate from Docker's. If you hit Docker Hub rate limits (429 Too Many Requests), you need to authenticate using:
+
+```bash
+container registry login -u <docker-username> docker.io
+```
+
+This is **not** shared with `docker login` - they use different credential stores.
+
 ### Running Commands
 
 - **Nomad**: Run `nomad` commands directly without environment variables
