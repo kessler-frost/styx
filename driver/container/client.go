@@ -338,7 +338,7 @@ func (c *Client) DiskUsage(ctx context.Context) (*DiskUsage, error) {
 
 // Prune removes unused images to free disk space
 func (c *Client) Prune(ctx context.Context) error {
-	cmd := exec.CommandContext(ctx, c.binPath, "image", "prune", "-f")
+	cmd := exec.CommandContext(ctx, c.binPath, "image", "prune", "--all")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("image prune failed: %s", string(output))
