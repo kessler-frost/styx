@@ -27,6 +27,12 @@ Styx combines Apple Containers with HashiCorp tools to turn any collection of Ma
 
 ## Installation
 
+### Quick Install (Recommended)
+
+```bash
+curl -sSL https://raw.githubusercontent.com/kessler-frost/styx/main/install.sh | sh
+```
+
 ### From Source
 
 ```bash
@@ -51,6 +57,16 @@ make build-all
    ```bash
    nomad job run example/nginx.nomad
    ```
+
+## Uninstall
+
+To completely remove styx and its data:
+
+```bash
+styx uninstall
+```
+
+This will interactively prompt you about removing dependencies installed via Homebrew.
 
 ## Example Jobs
 

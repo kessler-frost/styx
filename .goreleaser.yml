@@ -1,0 +1,48 @@
+version: 2
+project_name: styx
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: styx
+    main: ./cmd/styx
+    binary: styx
+    goos: [darwin]
+    goarch: [arm64, amd64]
+    ldflags:
+      - -s -w
+      - -X main.Version={{.Version}}
+
+  - id: apple-container
+    main: ./driver
+    binary: apple-container
+    goos: [darwin]
+    goarch: [arm64, amd64]
+    ldflags:
+      - -s -w
+
+archives:
+  - id: styx-archive
+    builds: [styx, apple-container]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format: tar.gz
+
+checksum:
+  name_template: 'checksums.txt'
+
+release:
+  github:
+    owner: kessler-frost
+    name: styx
+  draft: false
+  prerelease: auto
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^chore:'
+      - '^ci:'
