@@ -16,23 +16,24 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Check for changes since last nightly
+      - name: Check for changes since last release
         id: check
         run: |
-          LAST_NIGHTLY=$(git tag -l 'nightly-*' | sort -V | tail -1)
-          if [ -z "$LAST_NIGHTLY" ]; then
+          # Get latest CalVer tag (yyyy.mm.dd format)
+          LAST_RELEASE=$(git tag -l '20*' | sort -V | tail -1)
+          if [ -z "$LAST_RELEASE" ]; then
             echo "has_changes=true" >> $GITHUB_OUTPUT
-          elif git diff --quiet $LAST_NIGHTLY HEAD; then
+          elif git diff --quiet $LAST_RELEASE HEAD; then
             echo "has_changes=false" >> $GITHUB_OUTPUT
           else
             echo "has_changes=true" >> $GITHUB_OUTPUT
           fi
 
-      - name: Create and push nightly tag
+      - name: Create and push release tag
         if: steps.check.outputs.has_changes == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          TAG="nightly-$(date +%Y%m%d)"
-          git tag -fa $TAG -m "Nightly build $TAG"
+          TAG="$(date +%Y.%m.%d)"
+          git tag -fa $TAG -m "Release $TAG"
           git push origin $TAG --force

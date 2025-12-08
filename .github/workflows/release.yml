@@ -3,8 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*.*.*'
-      - 'nightly-*'
+      - '20*'  # CalVer: 2024.12.08, 2025.01.15, etc.
 
 permissions:
   contents: write
