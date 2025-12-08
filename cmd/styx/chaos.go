@@ -2,10 +2,9 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"net/http"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"time"
 
 	"github.com/kessler-frost/styx/internal/launchd"
@@ -103,26 +102,47 @@ func runChaos(cmd *cobra.Command, args []string) error {
 }
 
 func testAgentRecovery() error {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("failed to get home directory: %w", err)
-	}
-	plistPath := filepath.Join(home, "Library", "LaunchAgents", "com.styx.nomad.plist")
-
 	fmt.Println("  - Stopping Nomad agent...")
 	if err := launchd.Stop("com.styx.nomad"); err != nil {
 		return fmt.Errorf("failed to stop agent: %w", err)
 	}
 
-	time.Sleep(2 * time.Second)
+	// Kill any orphan Nomad/Vault processes that survived the launchd stop
+	fmt.Println("  - Cleaning up orphan processes...")
+	exec.Command("pkill", "-f", "nomad agent").Run()
+	exec.Command("pkill", "-f", "vault server").Run()
+
+	// Wait for ports to be freed (Nomad RPC on 4647, HTTP on 4646)
+	fmt.Println("  - Waiting for ports to be freed...")
+	if err := waitForPortFree(4646, 10*time.Second); err != nil {
+		return fmt.Errorf("port 4646 still in use: %w", err)
+	}
+	if err := waitForPortFree(4647, 10*time.Second); err != nil {
+		return fmt.Errorf("port 4647 still in use: %w", err)
+	}
 
 	fmt.Println("  - Restarting Nomad agent...")
-	if err := launchd.Load(plistPath); err != nil {
+	if err := launchd.Start("com.styx.nomad"); err != nil {
 		return fmt.Errorf("failed to restart agent: %w", err)
 	}
 
 	fmt.Println("  - Waiting for agent health...")
-	return waitForHealth("http://127.0.0.1:4646/v1/agent/health", 60*time.Second)
+	return waitForHealth("http://127.0.0.1:4646/v1/agent/health", 120*time.Second)
+}
+
+// waitForPortFree waits until a port is no longer in use
+func waitForPortFree(port int, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 100*time.Millisecond)
+		if err != nil {
+			// Connection refused means port is free
+			return nil
+		}
+		conn.Close()
+		time.Sleep(500 * time.Millisecond)
+	}
+	return fmt.Errorf("timeout waiting for port %d to be freed", port)
 }
 
 func testServiceRestart() error {
