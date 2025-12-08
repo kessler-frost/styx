@@ -55,6 +55,12 @@ func runInit(cmd *cobra.Command, args []string) error {
 		resp, err := client.Get("http://127.0.0.1:4646/v1/agent/health")
 		if err == nil && resp.StatusCode == http.StatusOK {
 			resp.Body.Close()
+
+			// Check if Vault needs unsealing (e.g., after system restart)
+			if err := ensureVaultUnsealed(); err != nil {
+				fmt.Printf("Warning: failed to unseal Vault: %v\n", err)
+			}
+
 			fmt.Println("Styx is already running and healthy")
 			fmt.Println("Use 'styx status' to check cluster status")
 			fmt.Println("Use 'styx stop' first if you want to reinitialize")
@@ -716,4 +722,33 @@ func promptServerSelection(count int) int {
 	}
 
 	return num - 1
+}
+
+// ensureVaultUnsealed checks if Vault is running and sealed, and unseals it if needed.
+// This handles the case where Vault restarts (e.g., after system reboot) and becomes sealed.
+func ensureVaultUnsealed() error {
+	// Check if Vault is responding
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get("http://127.0.0.1:8200/v1/sys/health")
+	if err != nil {
+		// Vault not running - nothing to unseal
+		return nil
+	}
+	resp.Body.Close()
+
+	// Check if sealed
+	sealed, err := vault.IsSealed()
+	if err != nil {
+		return fmt.Errorf("failed to check vault seal status: %w", err)
+	}
+
+	if sealed {
+		fmt.Println("Vault is sealed, unsealing...")
+		if err := vault.Unseal(secretsDir); err != nil {
+			return fmt.Errorf("failed to unseal vault: %w", err)
+		}
+		fmt.Println("Vault unsealed successfully")
+	}
+
+	return nil
 }
