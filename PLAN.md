@@ -159,14 +159,21 @@ Path-based routing by default: services at `https://hostname.ts.net/<service-nam
 
 ---
 
-## Phase 10: SSH TUI
-**Goal**: Visual cluster management
+## Phase 10: Guided Setup TUI ✓
+**Goal**: Interactive TUI for first-run setup and cluster management
 
-- [ ] SSH server (charmbracelet/wish)
-- [ ] TUI views (bubbletea)
-- [ ] View nodes, jobs, logs, metrics
+- [x] Prerequisites checking (homebrew, nomad, vault, container, tailscale)
+- [x] Guided installation with user confirmation
+- [x] Setup TUI view (internal/tui/setup/)
+- [x] API layer for data retrieval (internal/api/)
+- [x] JSON output for CLI commands (--json flags)
+- [x] TUI views: Cluster, Services, Jobs (internal/tui/views/)
+- [x] Default `styx` command launches TUI
 
-**Deliverable**: `ssh styx.local` gives management interface
+**Note**: SSH server (charmbracelet/wish) deferred to future phase.
+First-run TUI checks and installs prerequisites via Homebrew.
+
+**Deliverable**: `styx` launches interactive TUI with setup wizard (COMPLETE)
 
 ---
 
@@ -193,7 +200,7 @@ Path-based routing by default: services at `https://hostname.ts.net/<service-nam
 | Dashboards | Grafana | 8 |
 | Log Shipping | Promtail | 8 |
 | Chaos Testing | Kill nodes, partitions | 9 |
-| Management UI | SSH TUI | 10 |
+| Management UI | Bubbletea TUI | 10 |
 
 ---
 

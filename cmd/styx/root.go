@@ -26,13 +26,20 @@ var rootCmd = &cobra.Command{
 	Short: "Unite your Macs into a fleet for any workload",
 	Long: `Styx unites your Mac devices into a cohesive fleet for running workloads at any scale using Apple Containers and HashiCorp Nomad.
 
+Run 'styx' with no arguments to launch the interactive TUI.
+
 Commands:
   styx init              Start or join a Styx cluster
   styx init --serve      Force server mode
   styx init --join <ip>  Join a specific server
   styx stop              Stop the Styx service
   styx status            Show cluster status
-  styx services          Manage platform services`,
+  styx services          Manage platform services
+  styx jobs              List running jobs
+  styx nodes             List cluster nodes`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runTUI()
+	},
 }
 
 func init() {

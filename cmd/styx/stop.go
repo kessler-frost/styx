@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/kessler-frost/styx/internal/launchd"
+	"github.com/kessler-frost/styx/internal/services"
 	"github.com/spf13/cobra"
 )
 
@@ -36,7 +37,10 @@ func runStop(cmd *cobra.Command, args []string) error {
 
 	fmt.Println("Stopping Styx service...")
 
-	// Stop the service first
+	// Stop all Nomad jobs first so containers are properly cleaned up
+	stopAllJobs()
+
+	// Stop the service
 	if err := launchd.Stop(label); err != nil {
 		fmt.Printf("Warning: failed to stop service: %v\n", err)
 	}
@@ -51,4 +55,34 @@ func runStop(cmd *cobra.Command, args []string) error {
 
 	fmt.Println("Styx service stopped")
 	return nil
+}
+
+// stopAllJobs stops all running Nomad jobs
+func stopAllJobs() {
+	client := services.DefaultClient()
+
+	jobs, err := client.ListJobs()
+	if err != nil {
+		fmt.Printf("Warning: failed to list jobs: %v\n", err)
+		return
+	}
+
+	if len(jobs) == 0 {
+		return
+	}
+
+	fmt.Printf("Stopping %d job(s)...\n", len(jobs))
+
+	for _, job := range jobs {
+		if job.Status == "dead" {
+			continue
+		}
+		fmt.Printf("  Stopping job: %s\n", job.ID)
+		if err := client.StopJob(job.ID); err != nil {
+			fmt.Printf("  Warning: failed to stop job %s: %v\n", job.ID, err)
+		}
+	}
+
+	// Wait for jobs to stop and containers to be cleaned up
+	time.Sleep(3 * time.Second)
 }

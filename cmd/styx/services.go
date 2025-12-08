@@ -1,13 +1,18 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 
+	"github.com/kessler-frost/styx/internal/api"
 	"github.com/kessler-frost/styx/internal/network"
 	"github.com/kessler-frost/styx/internal/services"
 	"github.com/spf13/cobra"
 )
+
+var servicesJSON bool
 
 var servicesCmd = &cobra.Command{
 	Use:   "services",
@@ -50,6 +55,7 @@ var servicesStopCmd = &cobra.Command{
 }
 
 func init() {
+	servicesCmd.Flags().BoolVar(&servicesJSON, "json", false, "Output in JSON format")
 	servicesCmd.AddCommand(servicesStartCmd)
 	servicesCmd.AddCommand(servicesStopCmd)
 	rootCmd.AddCommand(servicesCmd)
@@ -66,10 +72,26 @@ func getAvailableServiceNames() string {
 
 func runServicesList(cmd *cobra.Command, args []string) error {
 	// Check if Nomad is running
-	client := services.DefaultClient()
-	if !client.IsHealthy() {
+	svcClient := services.DefaultClient()
+	if !svcClient.IsHealthy() {
+		if servicesJSON {
+			fmt.Println("[]")
+			return nil
+		}
 		fmt.Println("Nomad is not running. Start Styx first with 'styx init'")
 		return nil
+	}
+
+	// Use API client for JSON output
+	if servicesJSON {
+		apiClient := api.NewClient()
+		svcs, err := apiClient.GetPlatformServices()
+		if err != nil {
+			return fmt.Errorf("failed to get service status: %w", err)
+		}
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(svcs)
 	}
 
 	statuses, err := services.Status()
