@@ -162,7 +162,7 @@ func testServiceRestart() error {
 
 func testContainerRuntime() error {
 	fmt.Println("  - Checking container CLI...")
-	cmd := exec.Command("container", "version")
+	cmd := exec.Command("container", "--version")
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("container CLI not available: %w", err)
 	}
