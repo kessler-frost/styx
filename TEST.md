@@ -540,6 +540,154 @@ curl -s http://localhost:4200/prometheus/api/v1/status/config | jq '.status'
 
 ---
 
+## Phase 9: Complete Platform & Hardening
+
+### Prerequisites
+- Styx server running with `styx init --serve`
+- Phase 8 (Observability) working
+- Vault running and initialized
+
+### Test Cases
+
+#### 9.1 PostgreSQL Platform Service
+```bash
+styx services
+# Expected: postgres shows [running]
+
+# Check PostgreSQL is responding (via styx network)
+# Get postgres container IP
+POSTGRES_IP=$(container list --format json | jq -r '.[] | select(.configuration.id | contains("postgres")) | .networks[0].address' | cut -d'/' -f1)
+container exec $(container list --format json | jq -r '.[0].configuration.id') -- psql -h $POSTGRES_IP -U styx -d styx -c "SELECT 1"
+# Expected: Returns "1"
+```
+
+#### 9.2 RustFS Platform Service
+```bash
+styx services
+# Expected: rustfs shows [running]
+
+# Check RustFS health
+RUSTFS_IP=$(container list --format json | jq -r '.[] | select(.configuration.id | contains("rustfs")) | .networks[0].address' | cut -d'/' -f1)
+echo "RustFS at $RUSTFS_IP"
+# Expected: Shows IP address
+```
+
+#### 9.3 Chaos Testing - Agent Recovery
+```bash
+styx chaos --agent
+# Expected:
+#   - Nomad agent stops
+#   - Agent restarts automatically via launchd
+#   - Agent becomes healthy again
+```
+
+#### 9.4 Chaos Testing - Service Recovery
+```bash
+styx chaos --services
+# Expected:
+#   - Platform service stops
+#   - Nomad restarts the service
+#   - Service becomes healthy again
+```
+
+#### 9.5 Native Container Volumes
+```bash
+# Check volumes are being created
+container volume ls
+# Expected: Shows postgres-data and rustfs-data volumes
+
+# Verify PostgreSQL uses named volume
+container inspect $(container list --format json | jq -r '.[] | select(.configuration.id | contains("postgres")) | .configuration.id') | jq '.configuration.mounts'
+# Expected: Shows mount with "postgres-data" volume
+```
+
+#### 9.6 Container Stats Monitoring
+```bash
+# Get any running allocation
+ALLOC=$(NOMAD_ADDR=https://127.0.0.1:4646 NOMAD_SKIP_VERIFY=true nomad job allocs traefik -json | jq -r '.[0].ID')
+NOMAD_ADDR=https://127.0.0.1:4646 NOMAD_SKIP_VERIFY=true nomad alloc status $ALLOC | grep -A10 "Task Resources"
+# Expected: Shows CPU and Memory usage stats
+```
+
+#### 9.7 Disk Usage Monitoring
+```bash
+styx system df
+# Expected: Shows disk usage for images, containers, and volumes
+# Example output:
+#   Images:
+#     Total:       21
+#     Active:      10
+#     Size:        5.7 GB
+#     Reclaimable: 3.1 GB
+```
+
+#### 9.8 Image Prune
+```bash
+# Show current usage
+styx system df
+
+# Prune unused images
+styx system prune
+# Expected: "Freed X of disk space"
+
+# Verify space was freed
+styx system df
+# Expected: Lower size/reclaimable values for images
+```
+
+#### 9.9 Styx Status Command
+```bash
+styx status
+# Expected: Shows comprehensive status including:
+#   - Service status (running/stopped)
+#   - Vault health
+#   - Nomad health
+#   - Mode (server/client)
+#   - Cluster members (if server)
+#   - Core Services endpoints
+#   - Platform Endpoints
+```
+
+#### 9.10 Volume Persistence Test
+```bash
+# Stop postgres
+styx services stop postgres
+
+# Restart postgres
+styx services start postgres
+
+# Wait for it to start
+sleep 10
+
+# Check data persisted (volume should retain data)
+container volume ls | grep postgres-data
+# Expected: Volume still exists
+```
+
+### Phase 9 Notes
+
+**Platform Services**:
+- PostgreSQL: Database on port 5432, credentials from Vault
+- RustFS: S3-compatible storage on port 9000/9001, credentials from Vault
+
+**Native Container Volumes**:
+- `volumes` field supports both bind mounts and named volumes
+- Bind mount: `/host/path:/container/path`
+- Named volume: `volume-name:/container/path` (auto-created)
+
+**Chaos Testing**:
+- `styx chaos --agent`: Tests agent restart recovery
+- `styx chaos --services`: Tests service restart via Nomad
+- `styx chaos --container`: Tests container CLI availability
+- `styx chaos --rejoin`: Tests cluster membership
+- `styx chaos --all`: Runs all chaos tests
+
+**Disk Management**:
+- `styx system df`: Show container/image/volume disk usage
+- `styx system prune`: Remove unused images
+
+---
+
 ## Quick Smoke Test
 
 Run this after any changes to verify basic functionality:

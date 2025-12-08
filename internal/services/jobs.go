@@ -563,7 +563,7 @@ EOF
     }
   }
 }
-` + "`"
+`
 
 // rustfsJobHCL is the HCL for RustFS S3-compatible storage.
 const rustfsJobHCL = `job "rustfs" {
@@ -632,5 +632,4 @@ EOF
     }
   }
 }
-` + "`"
-
+`

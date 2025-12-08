@@ -26,6 +26,12 @@ type agentSelf struct {
 		Datacenter string `json:"Datacenter"`
 		NodeName   string `json:"NodeName"`
 		Region     string `json:"Region"`
+		Server     struct {
+			Enabled bool `json:"Enabled"`
+		} `json:"Server"`
+		Client struct {
+			Enabled bool `json:"Enabled"`
+		} `json:"Client"`
 	} `json:"config"`
 	Member struct {
 		Name   string `json:"Name"`
@@ -35,7 +41,6 @@ type agentSelf struct {
 	} `json:"member"`
 	Stats struct {
 		Client map[string]string `json:"client"`
-		Server map[string]string `json:"server"`
 	} `json:"stats"`
 }
 
@@ -125,7 +130,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	}
 
 	// Determine mode
-	isServer := self.Stats.Server != nil && len(self.Stats.Server) > 0
+	isServer := self.Config.Server.Enabled
 	if isServer {
 		fmt.Println("Mode:        server")
 	} else {
