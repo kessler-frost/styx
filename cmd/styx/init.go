@@ -315,6 +315,9 @@ cleanup() {
 
 trap cleanup SIGTERM SIGINT
 
+VAULT_ADDR="http://127.0.0.1:8200"
+export VAULT_ADDR
+
 # Start Vault
 "%s" server -config="%s" &
 VAULT_PID=$!
@@ -322,12 +325,27 @@ VAULT_PID=$!
 # Wait for Vault to be ready
 echo "Waiting for Vault..."
 for i in {1..30}; do
-    if curl -s http://127.0.0.1:8200/v1/sys/health 2>/dev/null | grep -q .; then
+    if curl -s $VAULT_ADDR/v1/sys/health 2>/dev/null | grep -q .; then
         echo "Vault is ready"
         break
     fi
     sleep 1
 done
+
+# Auto-unseal Vault if sealed
+INIT_FILE="%s/vault-init.json"
+if [ -f "$INIT_FILE" ]; then
+    # Check if Vault is sealed
+    SEALED=$(curl -s $VAULT_ADDR/v1/sys/health | python3 -c "import sys,json; print(json.load(sys.stdin).get('sealed', False))" 2>/dev/null)
+    if [ "$SEALED" = "True" ]; then
+        echo "Vault is sealed, auto-unsealing..."
+        UNSEAL_KEY=$(python3 -c "import json; print(json.load(open('$INIT_FILE'))['unseal_keys_b64'][0])" 2>/dev/null)
+        if [ -n "$UNSEAL_KEY" ]; then
+            curl -s -X PUT -d "{\"key\":\"$UNSEAL_KEY\"}" $VAULT_ADDR/v1/sys/unseal > /dev/null
+            echo "Vault unsealed"
+        fi
+    fi
+fi
 
 # Start Nomad
 "%s" agent -config="%s/nomad.hcl" &
@@ -335,7 +353,7 @@ NOMAD_PID=$!
 
 # Wait for either to exit
 wait
-`, vaultPath, vaultConfigPath, nomadPath, configDir)
+`, vaultPath, vaultConfigPath, secretsDir, nomadPath, configDir)
 
 	fmt.Printf("Writing wrapper script to: %s\n", wrapperPath)
 	if err := os.WriteFile(wrapperPath, []byte(wrapperContent), 0755); err != nil {
