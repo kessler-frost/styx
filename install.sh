@@ -5,12 +5,11 @@ REPO="kessler-frost/styx"
 INSTALL_DIR="${STYX_INSTALL_DIR:-$HOME/.local/bin}"
 PLUGIN_DIR="${STYX_PLUGIN_DIR:-$HOME/.local/lib/styx/plugins}"
 
-# Detect architecture
+# Detect architecture (Apple Silicon only)
 ARCH=$(uname -m)
 case $ARCH in
   arm64|aarch64) ARCH="arm64" ;;
-  x86_64) ARCH="amd64" ;;
-  *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
+  *) echo "Styx only supports Apple Silicon (arm64). Detected: $ARCH"; exit 1 ;;
 esac
 
 # Detect OS

@@ -10,7 +10,7 @@ builds:
     main: ./cmd/styx
     binary: styx
     goos: [darwin]
-    goarch: [arm64, amd64]
+    goarch: [arm64]
     ldflags:
       - -s -w
       - -X main.Version={{.Version}}
@@ -19,7 +19,7 @@ builds:
     main: ./driver
     binary: apple-container
     goos: [darwin]
-    goarch: [arm64, amd64]
+    goarch: [arm64]
     ldflags:
       - -s -w
 
