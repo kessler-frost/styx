@@ -60,7 +60,11 @@ func DeleteStyxNetwork() error {
 
 // NetworkExists checks if the styx network exists
 func NetworkExists() bool {
-	exists, _ := networkExists(StyxNetworkName)
+	exists, err := networkExists(StyxNetworkName)
+	if err != nil {
+		// If we can't check, assume it doesn't exist
+		return false
+	}
 	return exists
 }
 

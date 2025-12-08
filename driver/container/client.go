@@ -262,3 +262,86 @@ func (c *Client) Version(ctx context.Context) (string, error) {
 
 	return strings.TrimSpace(stdout.String()), nil
 }
+
+// VolumeExists checks if a named volume exists
+func (c *Client) VolumeExists(ctx context.Context, name string) (bool, error) {
+	cmd := exec.CommandContext(ctx, c.binPath, "volume", "ls", "--format", "json")
+	output, err := cmd.Output()
+	if err != nil {
+		return false, fmt.Errorf("volume list failed: %w", err)
+	}
+	// Check if name is in output
+	return strings.Contains(string(output), name), nil
+}
+
+// VolumeCreate creates a named volume
+func (c *Client) VolumeCreate(ctx context.Context, name string) error {
+	cmd := exec.CommandContext(ctx, c.binPath, "volume", "create", name)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("volume create failed: %s", string(output))
+	}
+	return nil
+}
+
+// Stats returns resource usage statistics for a container
+func (c *Client) Stats(ctx context.Context, id string) (*ContainerStats, error) {
+	cmd := exec.CommandContext(ctx, c.binPath, "stats", id, "--format", "json", "--no-stream")
+	output, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return nil, fmt.Errorf("container stats failed: %s", string(exitErr.Stderr))
+		}
+		return nil, fmt.Errorf("container stats failed: %w", err)
+	}
+
+	var stats []ContainerStats
+	if err := json.Unmarshal(output, &stats); err != nil {
+		return nil, fmt.Errorf("failed to parse stats output: %w", err)
+	}
+
+	if len(stats) == 0 {
+		return nil, fmt.Errorf("no stats available for container: %s", id)
+	}
+
+	return &stats[0], nil
+}
+
+// Pull downloads an image from the registry
+func (c *Client) Pull(ctx context.Context, image string) error {
+	cmd := exec.CommandContext(ctx, c.binPath, "image", "pull", image)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("image pull failed: %s", string(output))
+	}
+	return nil
+}
+
+// DiskUsage returns disk usage statistics for images, containers, and volumes
+func (c *Client) DiskUsage(ctx context.Context) (*DiskUsage, error) {
+	cmd := exec.CommandContext(ctx, c.binPath, "system", "df", "--format", "json")
+	output, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return nil, fmt.Errorf("system df failed: %s", string(exitErr.Stderr))
+		}
+		return nil, fmt.Errorf("system df failed: %w", err)
+	}
+
+	var usage DiskUsage
+	if err := json.Unmarshal(output, &usage); err != nil {
+		return nil, fmt.Errorf("failed to parse disk usage: %w", err)
+	}
+
+	return &usage, nil
+}
+
+// Prune removes unused images to free disk space
+func (c *Client) Prune(ctx context.Context) error {
+	cmd := exec.CommandContext(ctx, c.binPath, "image", "prune", "-f")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("image prune failed: %s", string(output))
+	}
+	return nil
+}

@@ -139,6 +139,43 @@ func runAutoDiscover() error {
 	return runClient(server.IP)
 }
 
+// ensureDirectories creates the specified directories if they don't exist
+func ensureDirectories(dirs []string) error {
+	for _, dir := range dirs {
+		fmt.Printf("Creating directory: %s\n", dir)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("failed to create directory %s: %w", dir, err)
+		}
+	}
+	return nil
+}
+
+// copyPluginToDir copies the plugin binary to the specified plugin directory
+func copyPluginToDir(pluginDir string) error {
+	pluginSrc := filepath.Join(filepath.Dir(os.Args[0]), "..", "plugins", "apple-container")
+	if _, err := os.Stat(pluginSrc); os.IsNotExist(err) {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("failed to get working directory: %w", err)
+		}
+		pluginSrc = filepath.Join(cwd, "plugins", "apple-container")
+	}
+
+	pluginDst := filepath.Join(pluginDir, "apple-container")
+	if _, err := os.Stat(pluginSrc); err == nil {
+		fmt.Printf("Copying plugin from %s to %s\n", pluginSrc, pluginDst)
+		if err := copyFile(pluginSrc, pluginDst); err != nil {
+			return fmt.Errorf("failed to copy plugin: %w", err)
+		}
+		if err := os.Chmod(pluginDst, 0755); err != nil {
+			return fmt.Errorf("failed to set plugin permissions: %w", err)
+		}
+	} else {
+		fmt.Printf("Warning: plugin not found at %s\n", pluginSrc)
+	}
+	return nil
+}
+
 // runServer starts Styx in server mode (Nomad + Vault + platform services)
 func runServer() error {
 	// Check for nomad binary
@@ -181,6 +218,9 @@ func runServer() error {
 	fmt.Printf("Container network ready: %s (%s)\n", network.StyxNetworkName, network.StyxNetworkSubnet)
 
 	// Create directories
+	postgresDataDir := filepath.Join(dataDir, "data", "postgres")
+	rustfsDataDir := filepath.Join(dataDir, "data", "rustfs")
+
 	dirs := []string{
 		dataDir,
 		configDir,
@@ -188,33 +228,17 @@ func runServer() error {
 		pluginDir,
 		secretsDir,
 		vaultDataDir,
+		postgresDataDir,
+		rustfsDataDir,
 	}
 
-	for _, dir := range dirs {
-		fmt.Printf("Creating directory: %s\n", dir)
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			return fmt.Errorf("failed to create directory %s: %w", dir, err)
-		}
+	if err := ensureDirectories(dirs); err != nil {
+		return err
 	}
 
 	// Copy plugin to plugin directory
-	pluginSrc := filepath.Join(filepath.Dir(os.Args[0]), "..", "plugins", "apple-container")
-	if _, err := os.Stat(pluginSrc); os.IsNotExist(err) {
-		cwd, _ := os.Getwd()
-		pluginSrc = filepath.Join(cwd, "plugins", "apple-container")
-	}
-
-	pluginDst := filepath.Join(pluginDir, "apple-container")
-	if _, err := os.Stat(pluginSrc); err == nil {
-		fmt.Printf("Copying plugin from %s to %s\n", pluginSrc, pluginDst)
-		if err := copyFile(pluginSrc, pluginDst); err != nil {
-			return fmt.Errorf("failed to copy plugin: %w", err)
-		}
-		if err := os.Chmod(pluginDst, 0755); err != nil {
-			return fmt.Errorf("failed to set plugin permissions: %w", err)
-		}
-	} else {
-		fmt.Printf("Warning: plugin not found at %s, assuming already installed\n", pluginSrc)
+	if err := copyPluginToDir(pluginDir); err != nil {
+		return err
 	}
 
 	// Generate Nomad server config
@@ -244,7 +268,10 @@ func runServer() error {
 	}
 	fmt.Printf("Found vault at: %s\n", vaultPath)
 
-	hostname, _ := os.Hostname()
+	hostname, err := os.Hostname()
+	if err != nil {
+		return fmt.Errorf("failed to get hostname: %w", err)
+	}
 	nodeID := hostname
 	if nodeID == "" {
 		nodeID = "node1"
@@ -310,7 +337,10 @@ wait
 	}
 
 	// Generate and write launchd plist (user agent)
-	home, _ := os.UserHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get home directory: %w", err)
+	}
 	plistPath := filepath.Join(home, "Library", "LaunchAgents", "com.styx.nomad.plist")
 	fmt.Printf("Creating launchd plist at: %s\n", plistPath)
 
@@ -333,7 +363,9 @@ wait
 	// Unload if already loaded
 	if launchd.IsLoaded("com.styx.nomad") {
 		fmt.Println("Unloading existing service...")
-		_ = launchd.Unload(plistPath)
+		if err := launchd.Unload(plistPath); err != nil {
+			fmt.Printf("Warning: failed to unload existing service: %v\n", err)
+		}
 		time.Sleep(2 * time.Second)
 	}
 
@@ -345,7 +377,7 @@ wait
 
 	// Initialize and unseal Vault
 	fmt.Println("Waiting for Vault to become ready...")
-	if err := waitForVaultHealth(30 * time.Second); err != nil {
+	if err := waitForService("vault", "http://127.0.0.1:8200/v1/sys/health", 30*time.Second, 200, 429, 501, 503); err != nil {
 		return fmt.Errorf("vault failed to start: %w\nCheck logs at %s", err, filepath.Join(logDir, "styx.log"))
 	}
 
@@ -362,7 +394,10 @@ wait
 		}
 	}
 
-	sealed, _ := vault.IsSealed()
+	sealed, err := vault.IsSealed()
+	if err != nil {
+		return fmt.Errorf("failed to check vault seal status: %w", err)
+	}
 	if sealed {
 		fmt.Println("Unsealing Vault...")
 		if err := vault.Unseal(secretsDir); err != nil {
@@ -371,7 +406,7 @@ wait
 	}
 
 	fmt.Println("Waiting for Vault to become active...")
-	if err := waitForVaultActive(60 * time.Second); err != nil {
+	if err := waitForService("vault", "http://127.0.0.1:8200/v1/sys/health", 60*time.Second); err != nil {
 		return fmt.Errorf("vault failed to become active: %w", err)
 	}
 
@@ -383,7 +418,7 @@ wait
 
 	// Wait for Nomad to become healthy
 	fmt.Println("Waiting for Nomad to become healthy...")
-	if err := waitForNomadHealth(60 * time.Second); err != nil {
+	if err := waitForService("nomad", "http://127.0.0.1:4646/v1/agent/health", 60*time.Second); err != nil {
 		return fmt.Errorf("nomad failed to start: %w\nCheck logs at %s", err, filepath.Join(logDir, "styx.log"))
 	}
 
@@ -485,31 +520,13 @@ func runClient(serverIP string) error {
 		pluginDir,
 	}
 
-	for _, dir := range dirs {
-		fmt.Printf("Creating directory: %s\n", dir)
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			return fmt.Errorf("failed to create directory %s: %w", dir, err)
-		}
+	if err := ensureDirectories(dirs); err != nil {
+		return err
 	}
 
 	// Copy plugin to plugin directory
-	pluginSrc := filepath.Join(filepath.Dir(os.Args[0]), "..", "plugins", "apple-container")
-	if _, err := os.Stat(pluginSrc); os.IsNotExist(err) {
-		cwd, _ := os.Getwd()
-		pluginSrc = filepath.Join(cwd, "plugins", "apple-container")
-	}
-
-	pluginDst := filepath.Join(pluginDir, "apple-container")
-	if _, err := os.Stat(pluginSrc); err == nil {
-		fmt.Printf("Copying plugin from %s to %s\n", pluginSrc, pluginDst)
-		if err := copyFile(pluginSrc, pluginDst); err != nil {
-			return fmt.Errorf("failed to copy plugin: %w", err)
-		}
-		if err := os.Chmod(pluginDst, 0755); err != nil {
-			return fmt.Errorf("failed to set plugin permissions: %w", err)
-		}
-	} else {
-		fmt.Printf("Warning: plugin not found at %s, assuming already installed\n", pluginSrc)
+	if err := copyPluginToDir(pluginDir); err != nil {
+		return err
 	}
 
 	// Generate client config
@@ -560,7 +577,10 @@ wait
 	}
 
 	// Generate and write launchd plist
-	home, _ := os.UserHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get home directory: %w", err)
+	}
 	plistPath := filepath.Join(home, "Library", "LaunchAgents", "com.styx.nomad.plist")
 	fmt.Printf("Creating launchd plist at: %s\n", plistPath)
 
@@ -583,7 +603,9 @@ wait
 	// Unload if already loaded
 	if launchd.IsLoaded("com.styx.nomad") {
 		fmt.Println("Unloading existing service...")
-		_ = launchd.Unload(plistPath)
+		if err := launchd.Unload(plistPath); err != nil {
+			fmt.Printf("Warning: failed to unload existing service: %v\n", err)
+		}
 		time.Sleep(2 * time.Second)
 	}
 
@@ -595,7 +617,7 @@ wait
 
 	// Wait for Nomad to become healthy locally
 	fmt.Println("Waiting for Nomad client to start...")
-	if err := waitForNomadHealth(60 * time.Second); err != nil {
+	if err := waitForService("nomad", "http://127.0.0.1:4646/v1/agent/health", 60*time.Second); err != nil {
 		return fmt.Errorf("nomad failed to start: %w\nCheck logs at %s", err, filepath.Join(logDir, "styx.log"))
 	}
 
@@ -613,61 +635,31 @@ wait
 	return nil
 }
 
-func waitForNomadHealth(timeout time.Duration) error {
+// waitForService waits for a service to become healthy by polling its health endpoint
+func waitForService(name, url string, timeout time.Duration, healthyCodes ...int) error {
+	if len(healthyCodes) == 0 {
+		healthyCodes = []int{http.StatusOK}
+	}
+
 	deadline := time.Now().Add(timeout)
 	client := &http.Client{Timeout: 2 * time.Second}
 
 	for time.Now().Before(deadline) {
-		resp, err := client.Get("http://127.0.0.1:4646/v1/agent/health")
+		resp, err := client.Get(url)
 		if err == nil {
 			resp.Body.Close()
-			if resp.StatusCode == http.StatusOK {
-				return nil
+			for _, code := range healthyCodes {
+				if resp.StatusCode == code {
+					fmt.Println() // End the dots line
+					return nil
+				}
 			}
 		}
 		time.Sleep(1 * time.Second)
 		fmt.Print(".")
 	}
 	fmt.Println()
-	return fmt.Errorf("timeout waiting for nomad health")
-}
-
-func waitForVaultHealth(timeout time.Duration) error {
-	deadline := time.Now().Add(timeout)
-	client := &http.Client{Timeout: 2 * time.Second}
-
-	for time.Now().Before(deadline) {
-		resp, err := client.Get("http://127.0.0.1:8200/v1/sys/health")
-		if err == nil {
-			resp.Body.Close()
-			if resp.StatusCode == 200 || resp.StatusCode == 429 || resp.StatusCode == 501 || resp.StatusCode == 503 {
-				return nil
-			}
-		}
-		time.Sleep(1 * time.Second)
-		fmt.Print(".")
-	}
-	fmt.Println()
-	return fmt.Errorf("timeout waiting for vault health")
-}
-
-func waitForVaultActive(timeout time.Duration) error {
-	deadline := time.Now().Add(timeout)
-	client := &http.Client{Timeout: 2 * time.Second}
-
-	for time.Now().Before(deadline) {
-		resp, err := client.Get("http://127.0.0.1:8200/v1/sys/health")
-		if err == nil {
-			resp.Body.Close()
-			if resp.StatusCode == 200 {
-				return nil
-			}
-		}
-		time.Sleep(1 * time.Second)
-		fmt.Print(".")
-	}
-	fmt.Println()
-	return fmt.Errorf("timeout waiting for vault to become active")
+	return fmt.Errorf("timeout waiting for %s health", name)
 }
 
 func copyFile(src, dst string) error {

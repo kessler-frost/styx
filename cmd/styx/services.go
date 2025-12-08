@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/kessler-frost/styx/internal/network"
 	"github.com/kessler-frost/styx/internal/services"
@@ -13,11 +14,24 @@ var servicesCmd = &cobra.Command{
 	Short: "Manage platform services",
 	Long: `Manage Styx platform services.
 
-Core services: NATS (messaging), Dragonfly (cache), Traefik (ingress)
-Observability: Prometheus (metrics), Loki (logs), Grafana (dashboards), Promtail (log shipper)
+Messaging & Cache:
+  nats       - Message queue (NATS)
+  dragonfly  - Redis-compatible cache (Dragonfly)
 
-Platform services are automatically deployed when starting a server.
-Use this command to view status or manually start/stop services.`,
+Ingress:
+  traefik    - Ingress controller (Traefik)
+
+Data:
+  postgres   - PostgreSQL database
+  rustfs     - S3-compatible storage (RustFS)
+
+Observability:
+  prometheus - Metrics server
+  loki       - Log aggregation
+  grafana    - Dashboards
+  promtail   - Log shipper
+
+Use 'styx services' to see status of all services.`,
 	RunE: runServicesList,
 }
 
@@ -39,6 +53,15 @@ func init() {
 	servicesCmd.AddCommand(servicesStartCmd)
 	servicesCmd.AddCommand(servicesStopCmd)
 	rootCmd.AddCommand(servicesCmd)
+}
+
+// getAvailableServiceNames returns a comma-separated list of available platform services
+func getAvailableServiceNames() string {
+	names := make([]string, len(services.PlatformServices))
+	for i, svc := range services.PlatformServices {
+		names[i] = svc.Name
+	}
+	return strings.Join(names, ", ")
 }
 
 func runServicesList(cmd *cobra.Command, args []string) error {
@@ -89,7 +112,7 @@ func runServicesStart(cmd *cobra.Command, args []string) error {
 	// Verify it's a known service
 	svc := services.GetService(name)
 	if svc == nil {
-		return fmt.Errorf("unknown service: %s\n\nAvailable services: nats, dragonfly, traefik, prometheus, loki, grafana, promtail", name)
+		return fmt.Errorf("unknown service: %s\n\nAvailable services: %s", name, getAvailableServiceNames())
 	}
 
 	// Check if Nomad is running
@@ -113,7 +136,7 @@ func runServicesStop(cmd *cobra.Command, args []string) error {
 	// Verify it's a known service
 	svc := services.GetService(name)
 	if svc == nil {
-		return fmt.Errorf("unknown service: %s\n\nAvailable services: nats, dragonfly, traefik, prometheus, loki, grafana, promtail", name)
+		return fmt.Errorf("unknown service: %s\n\nAvailable services: %s", name, getAvailableServiceNames())
 	}
 
 	// Check if Nomad is running

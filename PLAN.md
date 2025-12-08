@@ -101,10 +101,10 @@ No additional TLS or gossip encryption needed when all nodes are on the same Tai
   - `styx services` - list platform services with status
   - `styx services start <name>` - start a service
   - `styx services stop <name>` - stop a service
-- [ ] Deploy S3-compatible storage (deferred - see Notes)
+- [x] ~~S3-compatible storage~~ (moved to Phase 9 as RustFS)
 - [x] Example Go client for Dragonfly (`example/test-dragonfly/`)
 
-**Deliverable**: Platform services auto-deployed with Styx (COMPLETE - s3:// deferred)
+**Deliverable**: Platform services auto-deployed with Styx (COMPLETE)
 
 ---
 
@@ -145,14 +145,17 @@ Path-based routing by default: services at `https://hostname.ts.net/<service-nam
 
 ---
 
-## Phase 9: Resilience
-**Goal**: System handles failures gracefully
+## Phase 9: Complete Platform & Hardening ✓
+**Goal**: Add essential platform services, polish, stress test
 
-- [ ] Backup strategy for stateful services
-- [ ] Disaster recovery procedures
-- [ ] Chaos testing (kill nodes, partitions)
+- [x] PostgreSQL (database - essential for most apps)
+- [x] RustFS (S3-compatible object storage)
+- [x] Chaos testing (`styx chaos` command)
+- [x] Code cleanup and refactoring
+- [x] Improve error messages and UX
+- [x] Documentation updates
 
-**Deliverable**: Documented recovery procedures, tested
+**Deliverable**: Complete platform for deploying distributed services (COMPLETE)
 
 ---
 
@@ -180,7 +183,8 @@ Path-based routing by default: services at `https://hostname.ts.net/<service-nam
 | Secrets | Vault (Raft storage) | 5 |
 | Cache | Dragonfly | 6 |
 | Queue | NATS | 6 |
-| Storage | Deferred (see Notes) | 6 |
+| Database | PostgreSQL | 9 |
+| Object Storage | RustFS (S3-compatible) | 9 |
 | Ingress | Traefik + Tailscale Serve | 7 |
 | Load Balancing | Traefik | 7 |
 | TLS Termination | Tailscale Serve | 7 |
@@ -188,7 +192,7 @@ Path-based routing by default: services at `https://hostname.ts.net/<service-nam
 | Metrics | Prometheus | 8 |
 | Dashboards | Grafana | 8 |
 | Log Shipping | Promtail | 8 |
-| Backup/DR | TBD | 9 |
+| Chaos Testing | Kill nodes, partitions | 9 |
 | Management UI | SSH TUI | 10 |
 
 ---
@@ -328,3 +332,94 @@ Recommendation: Use cloud object storage (S3, GCS, R2) if needed.
   containers can't resolve those. Services tagged with `prometheus.scrape=true` are auto-discovered.
 - **Service port registration**: When using `address_mode = "driver"`, use numeric port values
   (e.g., `port = 8082`) not port labels - labels don't resolve to actual ports
+
+### Phase 9 Notes
+
+**New Platform Services:**
+- **PostgreSQL**: Database service on port 5432, uses Vault workload identity for password injection
+- **RustFS**: S3-compatible object storage on ports 9000 (API) and 9001 (console), routed via Traefik at `/rustfs`
+
+Both services:
+- Run on server nodes only (constraint: `node.class = "server"`)
+- Use persistent host volumes for data survival across restarts
+- Use Vault workload identities (JWT auth) for credential injection
+- Auto-deploy with other platform services on `styx init --serve`
+
+**Host Volume Configuration:**
+PostgreSQL and RustFS require host volumes configured in Nomad. The config templates now include:
+```hcl
+host_volume "postgres-data" {
+  path      = "{{.DataDir}}/data/postgres"
+  read_only = false
+}
+host_volume "rustfs-data" {
+  path      = "{{.DataDir}}/data/rustfs"
+  read_only = false
+}
+```
+
+**Chaos Testing (`styx chaos`):**
+- `styx chaos --agent`: Kill/restart Nomad agent via launchd, verify recovery
+- `styx chaos --services`: Stop platform service, verify Nomad restarts it
+- `styx chaos --container`: Verify container CLI availability
+- `styx chaos --rejoin`: Verify cluster membership and service discovery
+- `styx chaos --all`: Run all chaos tests
+
+**Code Improvements:**
+- Extracted helper functions in `init.go`: `ensureDirectories()`, `copyPluginToDir()`, `waitForService()`
+- Consolidated three wait functions into unified `waitForService()`
+- Fixed silent error handling throughout codebase (5+ instances)
+- Added port constants in `internal/constants/ports.go`
+- Dynamic service list generation in CLI error messages
+- Improved status command with actionable error messages and endpoint display
+- Added comprehensive godoc comments to driver package
+
+**Port Assignments (Phase 9):**
+- PostgreSQL: 5432
+- RustFS API: 9000
+- RustFS Console: 9001
+
+**Files Added/Modified:**
+- `internal/constants/ports.go` - NEW: Centralized port constants
+- `cmd/styx/chaos.go` - NEW: Chaos testing command
+- `internal/services/jobs.go` - Added PostgreSQL and RustFS HCL templates
+- `internal/services/services.go` - Registered new services
+- `internal/config/templates.go` - Added host volume blocks
+- `internal/vault/setup.go` - Added default secrets for postgres/rustfs
+- `cmd/styx/init.go` - Refactored helpers, fixed errors, added data directories
+- `cmd/styx/services.go` - Dynamic service lists, updated descriptions
+- `cmd/styx/status.go` - Improved error messages with next steps
+- `driver/driver.go`, `driver/config.go`, `driver/handle.go` - Added godoc comments
+
+### Phase 9 Addendum: Deep Container CLI Integration
+
+**Native Container Volumes:**
+- Extended `volumes` field in task driver with smart detection
+- Format: bind mount (`/host:/container`) vs named volume (`name:/container`)
+- Named volumes auto-created via `container volume create`
+- Removed Nomad `host_volume` blocks from config templates
+- Updated PostgreSQL/RustFS to use native container volumes
+
+**Container Stats Monitoring:**
+- Added `Stats()` method to container client
+- Updated `TaskStats()` in driver to return real container metrics
+- Feeds CPU and memory stats to Nomad
+
+**Image Pre-Pull:**
+- Added `Pull()` method to container client
+- Images pulled with retry logic (3 attempts, exponential backoff)
+- Ensures images are ready before container start
+
+**Disk Usage Monitoring:**
+- Added `DiskUsage()` and `Prune()` methods to container client
+- NEW: `styx system df` - Show container disk usage
+- NEW: `styx system prune` - Remove unused images
+
+**Files Modified:**
+- `driver/config.go` - Updated Volumes field comment
+- `driver/container/client.go` - Added VolumeExists/Create, Stats, Pull, DiskUsage, Prune
+- `driver/container/types.go` - Added ContainerStats, DiskUsage, DiskCategory types
+- `driver/driver.go` - Volume auto-creation, image pre-pull with retry, real TaskStats
+- `internal/services/jobs.go` - PostgreSQL/RustFS use native volumes
+- `internal/config/templates.go` - Removed host_volume blocks
+- `cmd/styx/system.go` - NEW: system df/prune commands

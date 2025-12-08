@@ -36,7 +36,11 @@ Commands:
 }
 
 func init() {
-	home, _ := os.UserHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: failed to get home directory: %v\n", err)
+		os.Exit(1)
+	}
 	styxBase := filepath.Join(home, ".styx")
 
 	rootCmd.PersistentFlags().StringVar(&dataDir, "data-dir", filepath.Join(styxBase, "nomad"), "Nomad data directory")

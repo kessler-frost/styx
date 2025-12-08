@@ -63,6 +63,9 @@ func Start(label string) error {
 // Restart restarts a service by stopping and starting it.
 func Restart(label string) error {
 	// Stop ignores errors since service might not be running
-	_ = Stop(label)
+	if err := Stop(label); err != nil {
+		// Log but continue - service might not have been running
+		fmt.Printf("Note: service %s was not running or failed to stop: %v\n", label, err)
+	}
 	return Start(label)
 }

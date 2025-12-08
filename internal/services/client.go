@@ -58,7 +58,10 @@ func (c *NomadClient) RunJob(hcl string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("failed to submit job (status %d): unable to read response body", resp.StatusCode)
+		}
 		return fmt.Errorf("failed to submit job (status %d): %s", resp.StatusCode, string(body))
 	}
 
@@ -89,7 +92,10 @@ func (c *NomadClient) parseHCL(hcl string) ([]byte, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
+		respBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse HCL (status %d): unable to read response body", resp.StatusCode)
+		}
 		return nil, fmt.Errorf("failed to parse HCL (status %d): %s", resp.StatusCode, string(respBody))
 	}
 
@@ -126,7 +132,10 @@ func (c *NomadClient) StopJob(jobID string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("failed to stop job (status %d): unable to read response body", resp.StatusCode)
+		}
 		return fmt.Errorf("failed to stop job (status %d): %s", resp.StatusCode, string(body))
 	}
 
@@ -146,7 +155,10 @@ func (c *NomadClient) GetJobStatus(jobID string) (*JobStatus, error) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get job status (status %d): unable to read response body", resp.StatusCode)
+		}
 		return nil, fmt.Errorf("failed to get job status (status %d): %s", resp.StatusCode, string(body))
 	}
 
@@ -174,7 +186,10 @@ func (c *NomadClient) ListJobs() ([]JobStatus, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list jobs (status %d): unable to read response body", resp.StatusCode)
+		}
 		return nil, fmt.Errorf("failed to list jobs (status %d): %s", resp.StatusCode, string(body))
 	}
 

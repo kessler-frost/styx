@@ -508,3 +508,129 @@ func PromtailJobHCL(nomadAllocDir string) string {
 	return strings.ReplaceAll(promtailJobHCLTemplate, "{{NOMAD_ALLOC_DIR}}", nomadAllocDir)
 }
 
+// postgresJobHCL is the HCL for PostgreSQL database.
+const postgresJobHCL = `job "postgres" {
+  datacenters = ["dc1"]
+  type        = "service"
+
+  constraint {
+    attribute = "${node.class}"
+    value     = "server"
+  }
+
+  group "postgres" {
+    count = 1
+
+    task "postgres" {
+      driver = "apple-container"
+
+      vault {
+        role = "nomad-workloads"
+      }
+
+      template {
+        data = <<EOF
+{{with secret "secret/data/postgres"}}
+POSTGRES_PASSWORD={{.Data.data.password}}
+{{end}}
+EOF
+        destination = "secrets/env"
+        env         = true
+      }
+
+      config {
+        image   = "postgres:16-alpine"
+        network = "styx"
+        volumes = ["postgres-data:/var/lib/postgresql/data"]
+        env = {
+          "POSTGRES_USER" = "styx"
+          "POSTGRES_DB"   = "styx"
+          "PGDATA"        = "/var/lib/postgresql/data/pgdata"
+        }
+      }
+
+      resources {
+        cpu    = 500
+        memory = 512
+      }
+
+      service {
+        name         = "postgres"
+        provider     = "nomad"
+        port         = 5432
+        address_mode = "driver"
+      }
+    }
+  }
+}
+` + "`"
+
+// rustfsJobHCL is the HCL for RustFS S3-compatible storage.
+const rustfsJobHCL = `job "rustfs" {
+  datacenters = ["dc1"]
+  type        = "service"
+
+  constraint {
+    attribute = "${node.class}"
+    value     = "server"
+  }
+
+  group "rustfs" {
+    count = 1
+
+    task "rustfs" {
+      driver = "apple-container"
+
+      vault {
+        role = "nomad-workloads"
+      }
+
+      template {
+        data = <<EOF
+{{with secret "secret/data/rustfs"}}
+RUSTFS_ROOT_USER={{.Data.data.access_key}}
+RUSTFS_ROOT_PASSWORD={{.Data.data.secret_key}}
+{{end}}
+EOF
+        destination = "secrets/env"
+        env         = true
+      }
+
+      config {
+        image   = "rustfs/rustfs:latest"
+        network = "styx"
+        volumes = ["rustfs-data:/data"]
+        args    = ["server", "/data", "--console-address", ":9001"]
+      }
+
+      resources {
+        cpu    = 200
+        memory = 256
+      }
+
+      service {
+        name         = "rustfs"
+        provider     = "nomad"
+        port         = 9000
+        address_mode = "driver"
+
+        tags = [
+          "traefik.enable=true",
+          "traefik.http.routers.rustfs.rule=PathPrefix(` + "`" + `/rustfs` + "`" + `)",
+          "traefik.http.routers.rustfs.entrypoints=http",
+          "traefik.http.middlewares.rustfs-strip.stripprefix.prefixes=/rustfs",
+          "traefik.http.routers.rustfs.middlewares=rustfs-strip"
+        ]
+      }
+
+      service {
+        name         = "rustfs-console"
+        provider     = "nomad"
+        port         = 9001
+        address_mode = "driver"
+      }
+    }
+  }
+}
+` + "`"
+

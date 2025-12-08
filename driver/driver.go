@@ -1,3 +1,6 @@
+// Package main implements a Nomad task driver for Apple Containers.
+// It manages the lifecycle of containers using Apple's container CLI tool,
+// providing orchestration capabilities for macOS containerized workloads.
 package main
 
 import (
@@ -38,7 +41,9 @@ var (
 	}
 )
 
-// Driver is the Apple Container driver implementation
+// Driver implements the Nomad task driver plugin interface for Apple Containers.
+// It handles starting, stopping, and monitoring containers on macOS hosts
+// using the native container CLI provided by Apple.
 type Driver struct {
 	eventer *eventer.Eventer
 	config  *Config
@@ -54,7 +59,8 @@ type Driver struct {
 	cancel context.CancelFunc
 }
 
-// NewDriver creates a new Apple Container driver
+// NewDriver creates a new Apple Container driver instance.
+// The logger should be configured for the Nomad plugin system.
 func NewDriver(logger hclog.Logger) drivers.DriverPlugin {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Driver{
@@ -66,17 +72,20 @@ func NewDriver(logger hclog.Logger) drivers.DriverPlugin {
 	}
 }
 
-// PluginInfo returns information about the plugin
+// PluginInfo returns metadata about the driver plugin including
+// its name, version, and type for the Nomad plugin system.
 func (d *Driver) PluginInfo() (*base.PluginInfoResponse, error) {
 	return pluginInfo, nil
 }
 
-// ConfigSchema returns the schema for the driver configuration
+// ConfigSchema returns the HCL specification for the driver's plugin-level configuration.
+// This defines the schema for configuration in the Nomad client's plugin block.
 func (d *Driver) ConfigSchema() (*hclspec.Spec, error) {
 	return configSpec, nil
 }
 
-// SetConfig is called by Nomad to set the configuration
+// SetConfig is called by Nomad to set the driver's plugin-level configuration.
+// It decodes the configuration and initializes the container client.
 func (d *Driver) SetConfig(cfg *base.Config) error {
 	var config Config
 	if len(cfg.PluginConfig) != 0 {
@@ -91,17 +100,20 @@ func (d *Driver) SetConfig(cfg *base.Config) error {
 	return nil
 }
 
-// TaskConfigSchema returns the schema for task configuration
+// TaskConfigSchema returns the HCL specification for task-level configuration.
+// This defines the schema for the driver config block in Nomad job specifications.
 func (d *Driver) TaskConfigSchema() (*hclspec.Spec, error) {
 	return taskConfigSpec, nil
 }
 
-// Capabilities returns the capabilities of the driver
+// Capabilities returns the feature set supported by this driver,
+// including signal handling and command execution capabilities.
 func (d *Driver) Capabilities() (*drivers.Capabilities, error) {
 	return driverCapabilities, nil
 }
 
-// Fingerprint streams health status of the driver
+// Fingerprint streams periodic health status updates about the driver.
+// It checks for the availability of the container CLI and reports version information.
 func (d *Driver) Fingerprint(ctx context.Context) (<-chan *drivers.Fingerprint, error) {
 	ch := make(chan *drivers.Fingerprint)
 	go d.handleFingerprint(ctx, ch)
@@ -152,7 +164,10 @@ func (d *Driver) buildFingerprint() *drivers.Fingerprint {
 	return fp
 }
 
-// StartTask starts a new task
+// StartTask launches a new container based on the provided task configuration.
+// It returns a TaskHandle for lifecycle management and a DriverNetwork containing
+// the container's network coordinates (IP, hostname) for service registration.
+// The driver automatically mounts Nomad's template, secrets, and alloc directories.
 func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drivers.DriverNetwork, error) {
 	if cfg.Resources == nil {
 		return nil, nil, fmt.Errorf("task resources are required")
@@ -173,9 +188,46 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 		fmt.Sprintf("%s:/secrets", taskDir.SecretsDir),
 		fmt.Sprintf("%s:/alloc", taskDir.SharedAllocDir),
 	}
+
+	// Auto-create named volumes (volumes that don't start with /)
+	for _, vol := range taskConfig.Volumes {
+		parts := strings.SplitN(vol, ":", 2)
+		if len(parts) < 2 {
+			continue
+		}
+		source := parts[0]
+		// If source doesn't start with /, it's a named volume
+		if !strings.HasPrefix(source, "/") {
+			exists, err := d.client.VolumeExists(d.ctx, source)
+			if err != nil {
+				d.logger.Warn("failed to check volume existence", "volume", source, "error", err)
+			}
+			if !exists {
+				d.logger.Info("creating named volume", "volume", source)
+				if err := d.client.VolumeCreate(d.ctx, source); err != nil {
+					return nil, nil, fmt.Errorf("failed to create volume %s: %w", source, err)
+				}
+			}
+		}
+	}
+
 	// Merge: auto-mounts first, then user volumes (user can override)
 	allVolumes := append(autoMounts, taskConfig.Volumes...)
 	d.logger.Debug("volume mounts", "auto", autoMounts, "user", taskConfig.Volumes, "all", allVolumes)
+
+	// Pre-pull image with retry logic
+	d.logger.Info("pulling image", "image", taskConfig.Image)
+	for attempt := 0; attempt < 3; attempt++ {
+		if err := d.client.Pull(d.ctx, taskConfig.Image); err != nil {
+			if attempt == 2 {
+				return nil, nil, fmt.Errorf("failed to pull image after 3 attempts: %w", err)
+			}
+			d.logger.Warn("image pull failed, retrying", "attempt", attempt+1, "error", err)
+			time.Sleep(time.Duration(attempt+1) * 5 * time.Second)
+			continue
+		}
+		break
+	}
 
 	// Sanitize container name - Apple container CLI doesn't allow slashes
 	containerName := strings.ReplaceAll(cfg.ID, "/", "-")
@@ -215,8 +267,12 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 	defer func() {
 		if startErr != nil {
 			d.logger.Warn("cleaning up container after start failure", "container_id", containerID, "error", startErr)
-			_ = d.client.Stop(d.ctx, containerID)
-			_ = d.client.Remove(d.ctx, containerID)
+			if err := d.client.Stop(d.ctx, containerID); err != nil {
+				d.logger.Warn("failed to stop container during cleanup", "container_id", containerID, "error", err)
+			}
+			if err := d.client.Remove(d.ctx, containerID); err != nil {
+				d.logger.Warn("failed to remove container during cleanup", "container_id", containerID, "error", err)
+			}
 		}
 	}()
 
@@ -297,7 +353,9 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 	return taskHandle, driverNetwork, nil
 }
 
-// RecoverTask restores a task from a previous driver state
+// RecoverTask attempts to recover a task handle from a previous driver instance.
+// This is called during Nomad client restarts to reclaim running containers.
+// It verifies the container still exists and recreates the task monitoring.
 func (d *Driver) RecoverTask(handle *drivers.TaskHandle) error {
 	if handle == nil {
 		return fmt.Errorf("handle is nil")
@@ -328,7 +386,8 @@ func (d *Driver) RecoverTask(handle *drivers.TaskHandle) error {
 	return nil
 }
 
-// WaitTask returns a channel that will be closed when the task exits
+// WaitTask blocks until the task exits and returns the exit result.
+// This is used by Nomad to monitor task completion and handle restarts.
 func (d *Driver) WaitTask(ctx context.Context, taskID string) (<-chan *drivers.ExitResult, error) {
 	d.tasksLock.RLock()
 	handle, ok := d.tasks[taskID]
@@ -352,7 +411,8 @@ func (d *Driver) WaitTask(ctx context.Context, taskID string) (<-chan *drivers.E
 	return ch, nil
 }
 
-// StopTask stops a running task
+// StopTask terminates a running container with the specified signal and timeout.
+// If signal is empty, SIGTERM is used for graceful shutdown.
 func (d *Driver) StopTask(taskID string, timeout time.Duration, signal string) error {
 	d.tasksLock.RLock()
 	handle, ok := d.tasks[taskID]
@@ -378,7 +438,8 @@ func (d *Driver) StopTask(taskID string, timeout time.Duration, signal string) e
 	return d.client.Stop(ctx, handle.containerID)
 }
 
-// DestroyTask removes a task
+// DestroyTask removes a container and cleans up associated resources.
+// If force is true, the container is forcefully removed without graceful shutdown.
 func (d *Driver) DestroyTask(taskID string, force bool) error {
 	d.tasksLock.Lock()
 	handle, ok := d.tasks[taskID]
@@ -401,7 +462,8 @@ func (d *Driver) DestroyTask(taskID string, force bool) error {
 	return nil
 }
 
-// InspectTask returns status of a task
+// InspectTask returns the current status of a running task,
+// including its state, start time, and exit result if completed.
 func (d *Driver) InspectTask(taskID string) (*drivers.TaskStatus, error) {
 	d.tasksLock.RLock()
 	handle, ok := d.tasks[taskID]
@@ -414,17 +476,17 @@ func (d *Driver) InspectTask(taskID string) (*drivers.TaskStatus, error) {
 	return handle.TaskStatus(), nil
 }
 
-// TaskStats returns resource usage stats for a task
+// TaskStats streams periodic resource usage statistics for a task.
+// Uses the container CLI to fetch actual resource metrics for the running container.
 func (d *Driver) TaskStats(ctx context.Context, taskID string, interval time.Duration) (<-chan *drivers.TaskResourceUsage, error) {
 	d.tasksLock.RLock()
-	_, ok := d.tasks[taskID]
+	handle, ok := d.tasks[taskID]
 	d.tasksLock.RUnlock()
 
 	if !ok {
 		return nil, fmt.Errorf("task %s not found", taskID)
 	}
 
-	// For now, return empty stats - can be enhanced later with actual resource monitoring
 	ch := make(chan *drivers.TaskResourceUsage)
 	go func() {
 		defer close(ch)
@@ -436,10 +498,28 @@ func (d *Driver) TaskStats(ctx context.Context, taskID string, interval time.Dur
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
+				stats, err := d.client.Stats(ctx, handle.containerID)
+				if err != nil {
+					// Container may not be running, send empty stats
+					ch <- &drivers.TaskResourceUsage{
+						ResourceUsage: &drivers.ResourceUsage{
+							MemoryStats: &drivers.MemoryStats{},
+							CpuStats:    &drivers.CpuStats{},
+						},
+						Timestamp: time.Now().UnixNano(),
+					}
+					continue
+				}
+
 				ch <- &drivers.TaskResourceUsage{
 					ResourceUsage: &drivers.ResourceUsage{
-						MemoryStats: &drivers.MemoryStats{},
-						CpuStats:    &drivers.CpuStats{},
+						MemoryStats: &drivers.MemoryStats{
+							RSS:      stats.MemoryUsageBytes,
+							MaxUsage: stats.MemoryLimitBytes,
+						},
+						CpuStats: &drivers.CpuStats{
+							Percent: stats.CPUPercent,
+						},
 					},
 					Timestamp: time.Now().UnixNano(),
 				}
@@ -450,12 +530,14 @@ func (d *Driver) TaskStats(ctx context.Context, taskID string, interval time.Dur
 	return ch, nil
 }
 
-// TaskEvents returns a channel for task events
+// TaskEvents returns a channel for receiving task lifecycle events
+// such as task starting, stopping, or state changes.
 func (d *Driver) TaskEvents(ctx context.Context) (<-chan *drivers.TaskEvent, error) {
 	return d.eventer.TaskEvents(ctx)
 }
 
-// SignalTask sends a signal to a task
+// SignalTask sends a Unix signal to a running task's container process.
+// Common signals include SIGTERM, SIGKILL, SIGHUP, etc.
 func (d *Driver) SignalTask(taskID string, signal string) error {
 	d.tasksLock.RLock()
 	handle, ok := d.tasks[taskID]
@@ -468,7 +550,8 @@ func (d *Driver) SignalTask(taskID string, signal string) error {
 	return d.client.Kill(d.ctx, handle.containerID, signal)
 }
 
-// ExecTask runs a command in a task
+// ExecTask executes a command inside a running container and returns the output.
+// This is used for non-interactive command execution with a timeout.
 func (d *Driver) ExecTask(taskID string, cmd []string, timeout time.Duration) (*drivers.ExecTaskResult, error) {
 	d.tasksLock.RLock()
 	handle, ok := d.tasks[taskID]
@@ -502,7 +585,8 @@ func (d *Driver) ExecTask(taskID string, cmd []string, timeout time.Duration) (*
 	return result, nil
 }
 
-// ExecTaskStreaming runs an interactive command in a task with streaming I/O
+// ExecTaskStreaming executes an interactive command in a container with streaming I/O.
+// This enables real-time stdin/stdout/stderr interaction for commands like shells.
 func (d *Driver) ExecTaskStreaming(ctx context.Context, taskID string, opts *drivers.ExecOptions) (*drivers.ExitResult, error) {
 	d.tasksLock.RLock()
 	handle, ok := d.tasks[taskID]
@@ -528,7 +612,7 @@ func (d *Driver) ExecTaskStreaming(ctx context.Context, taskID string, opts *dri
 	}, nil
 }
 
-// Shutdown cleans up the driver
+// Shutdown gracefully terminates the driver and cancels all background operations.
 func (d *Driver) Shutdown() {
 	d.cancel()
 }

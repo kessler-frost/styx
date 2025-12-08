@@ -63,6 +63,16 @@ var PlatformServices = []Service{
 		JobHCLFunc:  PromtailJobHCL,
 		HCLParam:    "alloc_dir",
 	},
+	{
+		Name:        "postgres",
+		Description: "PostgreSQL database",
+		JobHCL:      postgresJobHCL,
+	},
+	{
+		Name:        "rustfs",
+		Description: "S3-compatible storage (RustFS)",
+		JobHCL:      rustfsJobHCL,
+	},
 }
 
 // Deploy deploys a platform service by name
@@ -210,7 +220,11 @@ func StopAll() error {
 
 	for _, svc := range PlatformServices {
 		// Check if it's running first
-		status, _ := client.GetJobStatus(svc.Name)
+		status, err := client.GetJobStatus(svc.Name)
+		if err != nil {
+			fmt.Printf("Warning: failed to get status for %s: %v\n", svc.Name, err)
+			continue
+		}
 		if status == nil {
 			continue
 		}

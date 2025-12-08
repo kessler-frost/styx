@@ -185,7 +185,9 @@ func SetupNomadIntegration(secretsDir string) error {
 	cmd := exec.Command("vault", "secrets", "enable", "-path=secret", "kv-v2")
 	cmd.Env = env
 	// Ignore error if already enabled
-	_ = cmd.Run()
+	if err := cmd.Run(); err != nil {
+		fmt.Printf("Note: KV secrets engine may already be enabled: %v\n", err)
+	}
 
 	// Create Nomad workload policy for reading secrets
 	nomadPolicy := `
@@ -213,7 +215,9 @@ path "secret/metadata/*" {
 	cmd = exec.Command("vault", "auth", "enable", "-path=jwt-nomad", "jwt")
 	cmd.Env = env
 	// Ignore error if already enabled
-	_ = cmd.Run()
+	if err := cmd.Run(); err != nil {
+		fmt.Printf("Note: JWT auth method may already be enabled: %v\n", err)
+	}
 
 	// Wait for Nomad's JWKS endpoint to be ready before configuring JWT auth
 	// Vault validates the JWKS URL when writing config, so it must be available
@@ -247,6 +251,20 @@ path "secret/metadata/*" {
 	cmd.Env = env
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to create JWT role: %w\nOutput: %s", err, output)
+	}
+
+	// Create default postgres secret
+	cmd = exec.Command("vault", "kv", "put", "secret/postgres", "password=styx-postgres-secret")
+	cmd.Env = env
+	if err := cmd.Run(); err != nil {
+		fmt.Printf("Note: failed to create default postgres secret: %v\n", err)
+	}
+
+	// Create default rustfs secret
+	cmd = exec.Command("vault", "kv", "put", "secret/rustfs", "access_key=styxadmin", "secret_key=styx-rustfs-secret")
+	cmd.Env = env
+	if err := cmd.Run(); err != nil {
+		fmt.Printf("Note: failed to create default rustfs secret: %v\n", err)
 	}
 
 	// Save a marker file to indicate workload identity is configured

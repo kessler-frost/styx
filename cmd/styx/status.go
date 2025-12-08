@@ -60,7 +60,10 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	// Check if service is loaded
 	if !launchd.IsLoaded(label) {
 		fmt.Println("Service:     stopped")
-		fmt.Println("\nStyx is not running. Run 'styx' to start.")
+		fmt.Println()
+		fmt.Println("Styx is not running.")
+		fmt.Println("  To start a server:  styx init --serve")
+		fmt.Println("  To join a cluster:  styx init --join <ip>")
 		return nil
 	}
 	fmt.Println("Service:     running")
@@ -77,22 +80,34 @@ func runStatus(cmd *cobra.Command, args []string) error {
 			fmt.Println("Vault:       healthy (standby)")
 		} else if resp.StatusCode == 503 {
 			fmt.Println("Vault:       sealed")
+			fmt.Println()
+			fmt.Println("Vault is sealed and needs to be unsealed.")
+			fmt.Println("  Check initialization: vault status")
 		} else {
-			fmt.Println("Vault:       not running")
+			fmt.Println("Vault:       error (status code: " + fmt.Sprint(resp.StatusCode) + ")")
 		}
+	} else {
+		fmt.Println("Vault:       not responding")
 	}
 
 	// Check Nomad health
 	resp, err = client.Get("http://127.0.0.1:4646/v1/agent/health")
 	if err != nil {
 		fmt.Println("Nomad:       not responding")
-		fmt.Printf("\nNomad may still be starting. Check logs at: %s\n", logDir)
+		fmt.Println()
+		fmt.Println("Nomad may still be starting up.")
+		fmt.Printf("  Check logs:  tail -f %s/nomad.log\n", logDir)
+		fmt.Println("  Restart:     styx stop && styx init")
 		return nil
 	}
 	resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		fmt.Println("Nomad:       unhealthy")
+		fmt.Printf("Nomad:       unhealthy (status code: %d)\n", resp.StatusCode)
+		fmt.Println()
+		fmt.Println("Nomad is responding but reporting unhealthy status.")
+		fmt.Printf("  Check logs:  tail -f %s/nomad.log\n", logDir)
+		fmt.Println("  Restart:     styx stop && styx init")
 		return nil
 	}
 	fmt.Println("Nomad:       healthy")
@@ -147,11 +162,22 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	fmt.Println("\nNomad UI: http://127.0.0.1:4646")
+	// Show endpoints
+	fmt.Println("\nCore Services:")
+	fmt.Println("  Nomad UI:    http://127.0.0.1:4646")
 	if isServer {
-		fmt.Println("Vault UI: http://127.0.0.1:8200/ui")
+		fmt.Println("  Vault UI:    http://127.0.0.1:8200/ui")
 	}
-	fmt.Println("Transport encryption: Tailscale WireGuard")
+
+	// Show platform endpoints (only on servers where platform services run)
+	if isServer {
+		fmt.Println("\nPlatform Endpoints:")
+		fmt.Println("  Traefik:     http://localhost:4200")
+		fmt.Println("  Grafana:     http://localhost:4200/grafana")
+		fmt.Println("  Prometheus:  http://localhost:4200/prometheus")
+	}
+
+	fmt.Println("\nTransport encryption: Tailscale WireGuard")
 
 	return nil
 }

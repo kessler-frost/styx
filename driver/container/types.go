@@ -126,3 +126,32 @@ type RunOptions struct {
 	Network    string
 	WorkingDir string
 }
+
+// ContainerStats represents resource usage statistics from `container stats`
+type ContainerStats struct {
+	ContainerID      string  `json:"container"`
+	CPUPercent       float64 `json:"cpuPercent"`
+	MemoryUsageBytes uint64  `json:"memoryUsageBytes"`
+	MemoryLimitBytes uint64  `json:"memoryLimitBytes"`
+	MemoryPercent    float64 `json:"memoryPercent"`
+	NetworkRxBytes   uint64  `json:"networkRxBytes"`
+	NetworkTxBytes   uint64  `json:"networkTxBytes"`
+	BlockReadBytes   uint64  `json:"blockReadBytes"`
+	BlockWriteBytes  uint64  `json:"blockWriteBytes"`
+	PIDs             int     `json:"pids"`
+}
+
+// DiskUsage represents disk usage from `container system df`
+type DiskUsage struct {
+	Images     DiskCategory `json:"images"`
+	Containers DiskCategory `json:"containers"`
+	Volumes    DiskCategory `json:"volumes"`
+}
+
+// DiskCategory represents usage stats for a resource category
+type DiskCategory struct {
+	Total       int   `json:"total"`
+	Active      int   `json:"active"`
+	SizeInBytes int64 `json:"sizeInBytes"`
+	Reclaimable int64 `json:"reclaimable"`
+}

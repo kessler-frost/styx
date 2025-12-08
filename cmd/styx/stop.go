@@ -22,7 +22,10 @@ func init() {
 }
 
 func runStop(cmd *cobra.Command, args []string) error {
-	home, _ := os.UserHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get home directory: %w", err)
+	}
 	plistPath := filepath.Join(home, "Library", "LaunchAgents", "com.styx.nomad.plist")
 	label := "com.styx.nomad"
 
