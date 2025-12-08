@@ -379,6 +379,20 @@ const grafanaJobHCL = `job "grafana" {
     task "grafana" {
       driver = "apple-container"
 
+      vault {
+        role = "nomad-workloads"
+      }
+
+      template {
+        data = <<EOF
+{{with secret "secret/data/grafana"}}
+GF_SECURITY_ADMIN_PASSWORD={{.Data.data.admin_password}}
+{{end}}
+EOF
+        destination = "secrets/grafana.env"
+        env         = true
+      }
+
       config {
         image   = "grafana/grafana:latest"
         network = "styx"
@@ -386,7 +400,6 @@ const grafanaJobHCL = `job "grafana" {
         env     = {
           "GF_SERVER_ROOT_URL"            = "http://localhost:4200/grafana/"
           "GF_SERVER_SERVE_FROM_SUB_PATH" = "true"
-          "GF_SECURITY_ADMIN_PASSWORD"    = "admin"
           "GF_AUTH_ANONYMOUS_ENABLED"     = "true"
           "GF_AUTH_ANONYMOUS_ORG_ROLE"    = "Viewer"
           "GF_PATHS_PROVISIONING"         = "/local/provisioning"

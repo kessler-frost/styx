@@ -219,7 +219,7 @@ func (c *NomadClient) IsHealthy() bool {
 	if err != nil {
 		return false
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 	return resp.StatusCode == http.StatusOK
 }
 

@@ -10,8 +10,8 @@ import (
 // TailscaleInfo contains Tailscale network information for this machine.
 type TailscaleInfo struct {
 	IP       string // IPv4 address (e.g., "100.97.142.17")
-	Hostname string // Machine hostname (e.g., "fimbulwinter")
-	DNSName  string // Full MagicDNS name (e.g., "fimbulwinter.panthera-frog.ts.net")
+	Hostname string // Machine hostname (e.g., "myhost")
+	DNSName  string // Full MagicDNS name (e.g., "myhost.example-tailnet.ts.net")
 	Running  bool   // Whether Tailscale is connected
 }
 

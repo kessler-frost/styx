@@ -187,7 +187,7 @@ curl http://localhost:4200
 
 #### 4.4 Access via Tailscale Hostname
 ```bash
-curl http://fimbulwinter.panthera-frog.ts.net:4200
+curl http://<hostname>.<tailnet>.ts.net:4200
 # Expected: Returns nginx welcome page (replace with your hostname)
 ```
 
@@ -201,18 +201,18 @@ nomad job status nginx | grep -A5 "Service Status"
 #### 4.6 Service Registered with Tailscale Hostname
 ```bash
 nomad service info nginx
-# Expected: Shows Tailscale MagicDNS hostname (e.g., fimbulwinter.panthera-frog.ts.net)
+# Expected: Shows Tailscale MagicDNS hostname (e.g., <hostname>.<tailnet>.ts.net)
 ```
 
 #### 4.7 Cross-Node Communication
 ```bash
-# On Mac A (fimbulwinter): Start server and nginx
+# On Mac A (<hostname>): Start server and nginx
 styx -y
 nomad job run example/nginx.nomad
 
 # On Mac B: Join and access
 styx
-curl http://fimbulwinter.panthera-frog.ts.net:4200
+curl http://<hostname>.<tailnet>.ts.net:4200
 # Expected: Returns nginx welcome page
 ```
 
@@ -282,7 +282,7 @@ export VAULT_ADDR=http://127.0.0.1:8200
 export VAULT_TOKEN=$(cat ~/.styx/secrets/vault-init.json | jq -r '.root_token')
 
 # Store a secret
-vault kv put secret/nginx api_key=test123 db_password=secret456
+vault kv put secret/nginx api_key=<your-api-key> db_password=<your-password>
 # Expected: Success
 
 # Retrieve secret
@@ -306,7 +306,7 @@ vault policy read nomad-workloads
 # First create the secret
 export VAULT_ADDR=http://127.0.0.1:8200
 export VAULT_TOKEN=$(cat ~/.styx/secrets/vault-init.json | jq -r '.root_token')
-vault kv put secret/data/nginx api_key=test123 db_password=secret456
+vault kv put secret/data/nginx api_key=<your-api-key> db_password=<your-password>
 
 # Run job that uses Vault secrets
 nomad job run example/nginx-vault.nomad

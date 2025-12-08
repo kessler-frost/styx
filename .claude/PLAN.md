@@ -234,7 +234,7 @@ Removed Consul, TLS certificates, and gossip encryption in favor of simpler arch
 
 - Subnet collision problem: all Macs use same 192.168.64.0/24 vmnet subnet, so direct LAN routing won't work
 - Solution: Container network + native `-p` port mapping (no custom TCP proxy needed)
-- Task driver returns Tailscale MagicDNS hostname (e.g., `fimbulwinter.panthera-frog.ts.net`) in DriverNetwork
+- Task driver returns Tailscale MagicDNS hostname (e.g., `<hostname>.<tailnet>.ts.net`) in DriverNetwork
 - Services registered with Tailscale hostname, accessible from any node on the tailnet
 
 ### Container Network Architecture (Dec 2025)

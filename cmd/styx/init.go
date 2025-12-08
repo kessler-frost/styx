@@ -53,18 +53,19 @@ func runInit(cmd *cobra.Command, args []string) error {
 	if launchd.IsLoaded("com.styx.nomad") {
 		client := &http.Client{Timeout: 2 * time.Second}
 		resp, err := client.Get("http://127.0.0.1:4646/v1/agent/health")
-		if err == nil && resp.StatusCode == http.StatusOK {
-			resp.Body.Close()
+		if err == nil {
+			defer resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				// Check if Vault needs unsealing (e.g., after system restart)
+				if err := ensureVaultUnsealed(); err != nil {
+					fmt.Printf("Warning: failed to unseal Vault: %v\n", err)
+				}
 
-			// Check if Vault needs unsealing (e.g., after system restart)
-			if err := ensureVaultUnsealed(); err != nil {
-				fmt.Printf("Warning: failed to unseal Vault: %v\n", err)
+				fmt.Println("Styx is already running and healthy")
+				fmt.Println("Use 'styx status' to check cluster status")
+				fmt.Println("Use 'styx stop' first if you want to reinitialize")
+				return nil
 			}
-
-			fmt.Println("Styx is already running and healthy")
-			fmt.Println("Use 'styx status' to check cluster status")
-			fmt.Println("Use 'styx stop' first if you want to reinitialize")
-			return nil
 		}
 	}
 
@@ -507,7 +508,7 @@ func runClient(serverIP string) error {
 	if err != nil {
 		return fmt.Errorf("cannot reach Nomad server at %s:4646: %w", serverIP, err)
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("Nomad server at %s is not healthy (status %d)", serverIP, resp.StatusCode)
 	}
@@ -671,7 +672,7 @@ func waitForService(name, url string, timeout time.Duration, healthyCodes ...int
 	for time.Now().Before(deadline) {
 		resp, err := client.Get(url)
 		if err == nil {
-			resp.Body.Close()
+			defer resp.Body.Close()
 			for _, code := range healthyCodes {
 				if resp.StatusCode == code {
 					fmt.Println() // End the dots line
@@ -752,7 +753,7 @@ func ensureVaultUnsealed() error {
 		// Vault not running - nothing to unseal
 		return nil
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 
 	// Check if sealed
 	sealed, err := vault.IsSealed()

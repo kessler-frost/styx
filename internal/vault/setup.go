@@ -1,8 +1,10 @@
 package vault
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"net/http"
 	"os"
 	"os/exec"
@@ -147,6 +149,20 @@ func GetRootToken(secretsDir string) (string, error) {
 	return initOutput.RootToken, nil
 }
 
+// generateRandomPassword generates a random password of specified length.
+func generateRandomPassword(length int) (string, error) {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	b := make([]byte, length)
+	for i := range b {
+		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
+		if err != nil {
+			return "", fmt.Errorf("failed to generate random password: %w", err)
+		}
+		b[i] = charset[n.Int64()]
+	}
+	return string(b), nil
+}
+
 // waitForNomadJWKS waits for Nomad's JWKS endpoint to become available.
 func waitForNomadJWKS(timeout time.Duration) error {
 	jwksURL := "http://127.0.0.1:4646/.well-known/jwks.json"
@@ -253,18 +269,43 @@ path "secret/metadata/*" {
 		return fmt.Errorf("failed to create JWT role: %w\nOutput: %s", err, output)
 	}
 
-	// Create default postgres secret
-	cmd = exec.Command("vault", "kv", "put", "secret/postgres", "password=styx-postgres-secret")
+	// Create random postgres password
+	postgresPassword, err := generateRandomPassword(16)
+	if err != nil {
+		return fmt.Errorf("failed to generate postgres password: %w", err)
+	}
+	cmd = exec.Command("vault", "kv", "put", "secret/postgres", fmt.Sprintf("password=%s", postgresPassword))
 	cmd.Env = env
 	if err := cmd.Run(); err != nil {
 		fmt.Printf("Note: failed to create default postgres secret: %v\n", err)
 	}
 
-	// Create default rustfs secret
-	cmd = exec.Command("vault", "kv", "put", "secret/rustfs", "access_key=styxadmin", "secret_key=styx-rustfs-secret")
+	// Create random rustfs credentials
+	rustfsAccessKey, err := generateRandomPassword(16)
+	if err != nil {
+		return fmt.Errorf("failed to generate rustfs access key: %w", err)
+	}
+	rustfsSecretKey, err := generateRandomPassword(32)
+	if err != nil {
+		return fmt.Errorf("failed to generate rustfs secret key: %w", err)
+	}
+	cmd = exec.Command("vault", "kv", "put", "secret/rustfs",
+		fmt.Sprintf("access_key=%s", rustfsAccessKey),
+		fmt.Sprintf("secret_key=%s", rustfsSecretKey))
 	cmd.Env = env
 	if err := cmd.Run(); err != nil {
 		fmt.Printf("Note: failed to create default rustfs secret: %v\n", err)
+	}
+
+	// Create random Grafana admin password
+	grafanaPassword, err := generateRandomPassword(16)
+	if err != nil {
+		return fmt.Errorf("failed to generate grafana password: %w", err)
+	}
+	cmd = exec.Command("vault", "kv", "put", "secret/grafana", fmt.Sprintf("admin_password=%s", grafanaPassword))
+	cmd.Env = env
+	if err := cmd.Run(); err != nil {
+		fmt.Printf("Note: failed to create default grafana secret: %v\n", err)
 	}
 
 	// Save a marker file to indicate workload identity is configured

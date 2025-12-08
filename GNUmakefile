@@ -2,6 +2,7 @@ PLUGIN_NAME := apple-container
 PLUGIN_DIR := $(shell pwd)/plugins
 CLI_NAME := styx
 BIN_DIR := $(shell pwd)/bin
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 
 .PHONY: build build-cli build-all clean test dev install
 
@@ -32,17 +33,15 @@ dev: build
 	@echo "Plugin directory: $(PLUGIN_DIR)"
 	nomad agent -dev -plugin-dir=$(PLUGIN_DIR) -config=example/agent.hcl
 
-# Install styx and plugin to system locations (requires sudo)
+# Install to user directories (no sudo required)
 install: build-all
 	@echo "Installing styx..."
-	sudo mkdir -p /usr/local/lib/styx/plugins
-	sudo cp $(PLUGIN_DIR)/$(PLUGIN_NAME) /usr/local/lib/styx/plugins/
-	sudo chmod 755 /usr/local/lib/styx/plugins/$(PLUGIN_NAME)
-	sudo cp $(BIN_DIR)/$(CLI_NAME) /usr/local/bin/
-	sudo chmod 755 /usr/local/bin/$(CLI_NAME)
-	@echo "Installed successfully!"
-	@echo "  - Plugin: /usr/local/lib/styx/plugins/$(PLUGIN_NAME)"
-	@echo "  - CLI: /usr/local/bin/$(CLI_NAME)"
+	mkdir -p $(HOME)/.local/bin
+	mkdir -p $(HOME)/.local/lib/styx/plugins
+	cp $(PLUGIN_DIR)/$(PLUGIN_NAME) $(HOME)/.local/lib/styx/plugins/
+	cp $(BIN_DIR)/$(CLI_NAME) $(HOME)/.local/bin/
+	@echo "Installed to ~/.local/bin and ~/.local/lib/styx/plugins"
+	@echo "Ensure ~/.local/bin is in your PATH"
 
 # Format code
 fmt:
@@ -58,7 +57,7 @@ deps:
 
 # Build for release
 release:
-	GOOS=darwin GOARCH=arm64 go build -o dist/$(PLUGIN_NAME)_darwin_arm64 ./driver
-	GOOS=darwin GOARCH=amd64 go build -o dist/$(PLUGIN_NAME)_darwin_amd64 ./driver
-	GOOS=darwin GOARCH=arm64 go build -o dist/$(CLI_NAME)_darwin_arm64 ./cmd/styx
-	GOOS=darwin GOARCH=amd64 go build -o dist/$(CLI_NAME)_darwin_amd64 ./cmd/styx
+	GOOS=darwin GOARCH=arm64 go build -ldflags "-X main.Version=$(VERSION)" -o dist/$(PLUGIN_NAME)_darwin_arm64 ./driver
+	GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.Version=$(VERSION)" -o dist/$(PLUGIN_NAME)_darwin_amd64 ./driver
+	GOOS=darwin GOARCH=arm64 go build -ldflags "-X main.Version=$(VERSION)" -o dist/$(CLI_NAME)_darwin_arm64 ./cmd/styx
+	GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.Version=$(VERSION)" -o dist/$(CLI_NAME)_darwin_amd64 ./cmd/styx

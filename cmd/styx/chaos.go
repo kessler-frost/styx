@@ -197,7 +197,7 @@ func testClusterMembership() error {
 	if err != nil {
 		return fmt.Errorf("failed to get cluster members: %w", err)
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("unexpected status: %d", resp.StatusCode)
@@ -214,12 +214,11 @@ func waitForHealth(url string, timeout time.Duration) error {
 
 	for time.Now().Before(deadline) {
 		resp, err := client.Get(url)
-		if err == nil && resp.StatusCode == http.StatusOK {
-			resp.Body.Close()
-			return nil
-		}
-		if resp != nil {
-			resp.Body.Close()
+		if err == nil {
+			defer resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				return nil
+			}
 		}
 		time.Sleep(2 * time.Second)
 	}
