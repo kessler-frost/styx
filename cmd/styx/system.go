@@ -28,10 +28,18 @@ var systemPruneCmd = &cobra.Command{
 	RunE:  runSystemPrune,
 }
 
+var systemResetCmd = &cobra.Command{
+	Use:   "reset",
+	Short: "Stop all containers, remove volumes, and prune images",
+	Long:  `Full cleanup: stops all containers, removes all volumes, and prunes all images.`,
+	RunE:  runSystemReset,
+}
+
 func init() {
 	rootCmd.AddCommand(systemCmd)
 	systemCmd.AddCommand(systemDfCmd)
 	systemCmd.AddCommand(systemPruneCmd)
+	systemCmd.AddCommand(systemResetCmd)
 }
 
 func humanizeBytes(bytes int64) string {
@@ -122,6 +130,61 @@ func runSystemPrune(cmd *cobra.Command, args []string) error {
 
 	freed := beforeUsage.Images.SizeInBytes - afterUsage.Images.SizeInBytes
 	fmt.Printf("Freed %s of disk space\n", humanizeBytes(freed))
+
+	return nil
+}
+
+func runSystemReset(cmd *cobra.Command, args []string) error {
+	client := container.NewClient("/usr/local/bin/container")
+	ctx := context.Background()
+
+	// Get initial disk usage
+	beforeUsage, err := client.DiskUsage(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get disk usage: %w", err)
+	}
+
+	// Stop and remove all containers
+	fmt.Println("Stopping and removing all containers...")
+	containers, err := client.List(ctx, true)
+	if err != nil {
+		return fmt.Errorf("failed to list containers: %w", err)
+	}
+
+	for _, c := range containers {
+		_ = client.Stop(ctx, c.Configuration.ID)
+		_ = client.Remove(ctx, c.Configuration.ID)
+	}
+	fmt.Printf("  Removed %d containers\n", len(containers))
+
+	// Remove all volumes
+	fmt.Println("Removing all volumes...")
+	volumes, err := client.VolumeList(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to list volumes: %w", err)
+	}
+
+	for _, v := range volumes {
+		_ = client.VolumeRemove(ctx, v.Name)
+	}
+	fmt.Printf("  Removed %d volumes\n", len(volumes))
+
+	// Prune all images
+	fmt.Println("Pruning all images...")
+	if err := client.Prune(ctx); err != nil {
+		return fmt.Errorf("failed to prune images: %w", err)
+	}
+
+	// Get final disk usage
+	afterUsage, err := client.DiskUsage(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get disk usage: %w", err)
+	}
+
+	totalFreed := (beforeUsage.Images.SizeInBytes + beforeUsage.Containers.SizeInBytes + beforeUsage.Volumes.SizeInBytes) -
+		(afterUsage.Images.SizeInBytes + afterUsage.Containers.SizeInBytes + afterUsage.Volumes.SizeInBytes)
+
+	fmt.Printf("\nFreed %s of disk space\n", humanizeBytes(totalFreed))
 
 	return nil
 }

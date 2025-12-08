@@ -345,3 +345,34 @@ func (c *Client) Prune(ctx context.Context) error {
 	}
 	return nil
 }
+
+// VolumeInfo represents information about a volume
+type VolumeInfo struct {
+	Name string `json:"name"`
+}
+
+// VolumeList returns all volumes
+func (c *Client) VolumeList(ctx context.Context) ([]VolumeInfo, error) {
+	cmd := exec.CommandContext(ctx, c.binPath, "volume", "ls", "--format", "json")
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("volume list failed: %w", err)
+	}
+
+	var volumes []VolumeInfo
+	if err := json.Unmarshal(output, &volumes); err != nil {
+		return nil, fmt.Errorf("failed to parse volume list: %w", err)
+	}
+
+	return volumes, nil
+}
+
+// VolumeRemove removes a named volume
+func (c *Client) VolumeRemove(ctx context.Context, name string) error {
+	cmd := exec.CommandContext(ctx, c.binPath, "volume", "rm", name)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("volume remove failed: %s", string(output))
+	}
+	return nil
+}
