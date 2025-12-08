@@ -1,10 +1,14 @@
 # Styx
 
-Styx unites your Mac devices into a cohesive fleet for running workloads at any scale.
+[![Latest Release](https://img.shields.io/github/v/release/kessler-frost/styx)](https://github.com/kessler-frost/styx/releases)
+[![License](https://img.shields.io/github/license/kessler-frost/styx)](LICENSE)
+[![macOS](https://img.shields.io/badge/platform-macOS-blue)](https://github.com/kessler-frost/styx)
+
+Your personal cloud platform built for macOS.
 
 ## Overview
 
-Styx combines Apple Containers with HashiCorp tools to turn any collection of Macs into unified infrastructure:
+Run your own cloud infrastructure on macOS. Styx brings together the best-in-class tools to create a complete platform:
 
 - **Apple Containers** - Native macOS containerization (lightweight VMs)
 - **Nomad** - Workload orchestration and scheduling

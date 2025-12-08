@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Styx unites your Mac devices into a cohesive fleet for running workloads at any scale.
+Your personal cloud platform built for macOS.
 
 **Target**: macOS 26+ with Apple Silicon
 

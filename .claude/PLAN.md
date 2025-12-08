@@ -1,6 +1,6 @@
 # Styx Implementation Plan
 
-> Styx unites your Mac devices into a cohesive fleet for running workloads at any scale
+> Your personal cloud platform built for macOS
 
 ## Status Legend
 - [ ] Not started
