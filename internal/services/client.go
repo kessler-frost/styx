@@ -222,3 +222,58 @@ func (c *NomadClient) IsHealthy() bool {
 	resp.Body.Close()
 	return resp.StatusCode == http.StatusOK
 }
+
+// PurgeJob permanently removes a job and all its allocations
+func (c *NomadClient) PurgeJob(jobID string) error {
+	req, err := http.NewRequest("DELETE", c.addr+"/v1/job/"+jobID+"?purge=true", nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to purge job: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to purge job (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	return nil
+}
+
+// HasFailedAllocations checks if a job exists and all its allocations have failed
+func (c *NomadClient) HasFailedAllocations(jobID string) bool {
+	resp, err := c.client.Get(c.addr + "/v1/job/" + jobID + "/allocations")
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return false
+	}
+
+	var allocs []struct {
+		ClientStatus string `json:"ClientStatus"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&allocs); err != nil {
+		return false
+	}
+
+	if len(allocs) == 0 {
+		return false
+	}
+
+	// Check if ALL allocations are failed or complete (dead)
+	for _, a := range allocs {
+		if a.ClientStatus == "running" || a.ClientStatus == "pending" {
+			return false
+		}
+	}
+
+	return true
+}

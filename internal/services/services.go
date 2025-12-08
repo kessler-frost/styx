@@ -81,6 +81,12 @@ func Deploy(name string) error {
 
 	for _, svc := range PlatformServices {
 		if svc.Name == name {
+			// If job exists with all failed allocations, purge it first
+			// This ensures a clean redeploy instead of being stuck with failed allocs
+			if client.HasFailedAllocations(name) {
+				_ = client.PurgeJob(name)
+			}
+
 			hcl, err := getServiceHCL(svc)
 			if err != nil {
 				return fmt.Errorf("failed to generate HCL for %s: %w", name, err)
