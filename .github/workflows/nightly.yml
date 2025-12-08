@@ -1,4 +1,4 @@
-name: Nightly Release
+name: Nightly
 
 on:
   schedule:
@@ -9,10 +9,8 @@ permissions:
   contents: write
 
 jobs:
-  check-changes:
+  nightly:
     runs-on: ubuntu-latest
-    outputs:
-      has_changes: ${{ steps.check.outputs.has_changes }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -30,43 +28,11 @@ jobs:
             echo "has_changes=true" >> $GITHUB_OUTPUT
           fi
 
-  release:
-    needs: check-changes
-    if: needs.check-changes.outputs.has_changes == 'true'
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.23'
-
-      - name: Create nightly tag
+      - name: Create and push nightly tag
+        if: steps.check.outputs.has_changes == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           TAG="nightly-$(date +%Y%m%d)"
           git tag -fa $TAG -m "Nightly build $TAG"
           git push origin $TAG --force
-
-      - uses: goreleaser/goreleaser-action@v6
-        with:
-          distribution: goreleaser
-          version: latest
-          args: release --clean --snapshot --skip=publish
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload nightly artifacts
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: nightly-${{ github.run_id }}
-          name: Nightly Build
-          prerelease: true
-          files: |
-            dist/*.tar.gz
-            dist/checksums.txt
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
