@@ -34,7 +34,7 @@ Run your own cloud infrastructure on macOS. Styx brings together the best-in-cla
 ### Quick Install (Recommended)
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/kessler-frost/styx/main/install.sh | sh
+curl -fsSL https://styx.leviathan.wtf/install.sh | sh
 ```
 
 ### From Source
@@ -49,12 +49,12 @@ make build-all
 
 1. Start server node:
    ```bash
-   ./bin/styx init
+   styx init
    ```
 
 2. Join client node:
    ```bash
-   ./bin/styx init --join <server-tailscale-ip>
+   styx init --join <server-tailscale-ip>
    ```
 
 3. Deploy a workload:
