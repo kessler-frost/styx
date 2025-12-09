@@ -6,6 +6,35 @@
 
 Your personal cloud platform built for macOS. Deploy containers, manage secrets, and scale across multiple machines—no Docker required.
 
+## Requirements
+
+- macOS 26+ (Tahoe) with Apple Silicon
+- [Homebrew](https://brew.sh), [Apple Container CLI](https://github.com/apple/container), [Tailscale](https://tailscale.com/download)
+
+## Installation
+
+```bash
+curl -fsSL https://styx.leviathan.wtf/install.sh | sh
+```
+
+Or from source: `git clone https://github.com/kessler-frost/styx && cd styx && make build-all`
+
+## Quick Start
+
+```bash
+# Start server
+styx init
+
+# Join additional nodes (optional)
+styx init --join <server-tailscale-ip>
+
+# Deploy a workload
+nomad job run example/nginx.nomad
+
+# Start platform services (optional)
+styx services start
+```
+
 ## Architecture
 
 ```
@@ -110,35 +139,6 @@ Your personal cloud platform built for macOS. Deploy containers, manage secrets,
 Internet ──▶ Tailscale ──▶ Traefik ──┬──▶ /blog   ──▶ Ghost
                                      ├──▶ /api    ──▶ API
                                      └──▶ /files  ──▶ Minio
-```
-
-## Requirements
-
-- macOS 26+ (Tahoe) with Apple Silicon
-- [Homebrew](https://brew.sh), [Apple Container CLI](https://github.com/apple/container), [Tailscale](https://tailscale.com/download)
-
-## Installation
-
-```bash
-curl -fsSL https://styx.leviathan.wtf/install.sh | sh
-```
-
-Or from source: `git clone https://github.com/kessler-frost/styx && cd styx && make build-all`
-
-## Quick Start
-
-```bash
-# Start server
-styx init
-
-# Join additional nodes (optional)
-styx init --join <server-tailscale-ip>
-
-# Deploy a workload
-nomad job run example/nginx.nomad
-
-# Start platform services (optional)
-styx services start
 ```
 
 ## Example Jobs
