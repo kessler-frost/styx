@@ -7,24 +7,19 @@ import (
 	"strings"
 )
 
-// findTailscaleBinary finds the tailscale binary in common locations.
+// findTailscaleBinary finds the tailscale binary, preferring PATH lookup.
 func findTailscaleBinary() string {
-	tailscalePaths := []string{
-		"/Applications/Tailscale.app/Contents/MacOS/Tailscale",
-		"/usr/local/bin/tailscale",
-		"tailscale",
+	// First try PATH lookup
+	if path, err := exec.LookPath("tailscale"); err == nil {
+		return path
 	}
 
-	for _, p := range tailscalePaths {
-		if p == "tailscale" {
-			if path, err := exec.LookPath(p); err == nil {
-				return path
-			}
-			continue
-		}
-		if _, err := exec.LookPath(p); err == nil {
-			return p
-		}
+	// Fall back to known macOS locations (e.g., Mac App Store install)
+	knownPaths := []string{
+		"/Applications/Tailscale.app/Contents/MacOS/Tailscale",
+	}
+
+	for _, p := range knownPaths {
 		if abs, _ := filepath.Abs(p); abs != "" {
 			if _, err := exec.Command("test", "-x", p).CombinedOutput(); err == nil {
 				return p

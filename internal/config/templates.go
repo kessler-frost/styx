@@ -29,7 +29,7 @@ plugin_dir = "{{.PluginDir}}"
 
 plugin "apple-container" {
   config {
-    container_bin_path = "/usr/local/bin/container"
+    container_bin_path = "{{.ContainerBinPath}}"
   }
 }
 
@@ -79,7 +79,7 @@ plugin_dir = "{{.PluginDir}}"
 
 plugin "apple-container" {
   config {
-    container_bin_path = "/usr/local/bin/container"
+    container_bin_path = "{{.ContainerBinPath}}"
   }
 }
 

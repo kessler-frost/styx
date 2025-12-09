@@ -12,7 +12,7 @@ var (
 	configSpec = hclspec.NewObject(map[string]*hclspec.Spec{
 		"container_bin_path": hclspec.NewDefault(
 			hclspec.NewAttr("container_bin_path", "string", false),
-			hclspec.NewLiteral(`"/usr/local/bin/container"`),
+			hclspec.NewLiteral(`""`),
 		),
 	})
 
@@ -35,7 +35,7 @@ var (
 // This includes the path to the container binary and other driver-wide settings.
 type Config struct {
 	// ContainerBinPath is the path to the Apple container CLI binary.
-	// Defaults to /usr/local/bin/container if not specified.
+	// If empty, the driver will look up "container" in PATH.
 	ContainerBinPath string `codec:"container_bin_path"`
 }
 

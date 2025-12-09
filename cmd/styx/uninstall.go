@@ -112,7 +112,12 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 }
 
 func removeContainersAndVolumes() {
-	client := container.NewClient("/usr/local/bin/container")
+	binPath, err := exec.LookPath("container")
+	if err != nil {
+		// Container CLI not found, nothing to clean up
+		return
+	}
+	client := container.NewClient(binPath)
 	ctx := context.Background()
 
 	// Stop and remove all containers

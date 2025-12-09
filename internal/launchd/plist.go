@@ -11,7 +11,7 @@ import (
 // PlistConfig holds the configuration for a launchd plist file.
 type PlistConfig struct {
 	Label      string   // Unique identifier, e.g., "com.styx.nomad"
-	Program    string   // Path to executable, e.g., "/usr/local/bin/nomad"
+	Program    string   // Path to executable (discovered via PATH lookup)
 	Args       []string // Arguments to pass to program
 	LogPath    string   // Path for stdout logs
 	ErrLogPath string   // Path for stderr logs

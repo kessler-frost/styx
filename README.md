@@ -32,7 +32,7 @@ styx init --join <server-tailscale-ip>
 nomad job run example/nginx.nomad
 
 # Start platform services (optional)
-styx services start
+styx services start --all
 ```
 
 ## Architecture
@@ -43,6 +43,7 @@ flowchart TB
         cli["styx CLI"]
         subgraph nomad["Nomad (Orchestrator)"]
             subgraph driver["Apple Container Driver"]
+                traefik["Traefik (required)"]
                 c1["Container (nginx)"]
                 c2["Container (redis)"]
                 c3["..."]
@@ -64,7 +65,9 @@ flowchart TB
 - **Tailscale** - Encrypted mesh networking
 - **Traefik** - Ingress with automatic service discovery
 
-**Platform Services** (optional): NATS, Dragonfly, Prometheus, Loki, Grafana
+**Platform Services:**
+- **Traefik** (required) - Ingress controller, deployed by `styx init`
+- **Optional** (via `styx services start --all`): NATS, Dragonfly, Prometheus, Loki, Grafana, Promtail, Postgres, RustFS
 
 ## How It Works
 

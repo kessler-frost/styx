@@ -3,10 +3,20 @@ package main
 import (
 	"context"
 	"fmt"
+	"os/exec"
 
 	"github.com/kessler-frost/styx/driver/container"
 	"github.com/spf13/cobra"
 )
+
+// getContainerClient creates a container client using PATH lookup
+func getContainerClient() (*container.Client, error) {
+	binPath, err := exec.LookPath("container")
+	if err != nil {
+		return nil, fmt.Errorf("container CLI not found in PATH: %w", err)
+	}
+	return container.NewClient(binPath), nil
+}
 
 var systemCmd = &cobra.Command{
 	Use:   "system",
@@ -62,7 +72,10 @@ func humanizeBytes(bytes int64) string {
 }
 
 func runSystemDf(cmd *cobra.Command, args []string) error {
-	client := container.NewClient("/usr/local/bin/container")
+	client, err := getContainerClient()
+	if err != nil {
+		return err
+	}
 	ctx := context.Background()
 
 	usage, err := client.DiskUsage(ctx)
@@ -108,7 +121,10 @@ func runSystemDf(cmd *cobra.Command, args []string) error {
 }
 
 func runSystemPrune(cmd *cobra.Command, args []string) error {
-	client := container.NewClient("/usr/local/bin/container")
+	client, err := getContainerClient()
+	if err != nil {
+		return err
+	}
 	ctx := context.Background()
 
 	// Get usage before prune
@@ -135,7 +151,10 @@ func runSystemPrune(cmd *cobra.Command, args []string) error {
 }
 
 func runSystemReset(cmd *cobra.Command, args []string) error {
-	client := container.NewClient("/usr/local/bin/container")
+	client, err := getContainerClient()
+	if err != nil {
+		return err
+	}
 	ctx := context.Background()
 
 	// Get initial disk usage

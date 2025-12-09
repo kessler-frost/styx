@@ -75,6 +75,32 @@ var PlatformServices = []Service{
 	},
 }
 
+// MandatoryServices are services that must be deployed for the platform to function
+var MandatoryServices = []string{"traefik"}
+
+// OptionalServices are services that enhance the platform but aren't required
+var OptionalServices = []string{"nats", "dragonfly", "prometheus", "loki", "grafana", "promtail", "postgres", "rustfs"}
+
+// IsMandatoryService checks if a service name is in the mandatory services list
+func IsMandatoryService(name string) bool {
+	for _, svc := range MandatoryServices {
+		if svc == name {
+			return true
+		}
+	}
+	return false
+}
+
+// IsOptionalService checks if a service name is in the optional services list
+func IsOptionalService(name string) bool {
+	for _, svc := range OptionalServices {
+		if svc == name {
+			return true
+		}
+	}
+	return false
+}
+
 // Deploy deploys a platform service by name
 func Deploy(name string) error {
 	client := DefaultClient()
@@ -187,6 +213,54 @@ func DeployAll() error {
 	return waitForServices(60 * time.Second)
 }
 
+// DeployMandatory deploys only the mandatory platform services
+func DeployMandatory() error {
+	client := DefaultClient()
+
+	for _, svc := range PlatformServices {
+		if !IsMandatoryService(svc.Name) {
+			continue
+		}
+
+		fmt.Printf("  Deploying %s...\n", svc.Name)
+		hcl, err := getServiceHCL(svc)
+		if err != nil {
+			return fmt.Errorf("failed to generate HCL for %s: %w", svc.Name, err)
+		}
+		if err := client.RunJob(hcl); err != nil {
+			return fmt.Errorf("failed to deploy %s: %w", svc.Name, err)
+		}
+	}
+
+	// Wait for mandatory services to become running
+	fmt.Println("  Waiting for mandatory services to start...")
+	return waitForMandatoryServices(60 * time.Second)
+}
+
+// DeployOptional deploys all optional platform services
+func DeployOptional() error {
+	client := DefaultClient()
+
+	for _, svc := range PlatformServices {
+		if !IsOptionalService(svc.Name) {
+			continue
+		}
+
+		fmt.Printf("  Deploying %s...\n", svc.Name)
+		hcl, err := getServiceHCL(svc)
+		if err != nil {
+			return fmt.Errorf("failed to generate HCL for %s: %w", svc.Name, err)
+		}
+		if err := client.RunJob(hcl); err != nil {
+			return fmt.Errorf("failed to deploy %s: %w", svc.Name, err)
+		}
+	}
+
+	// Wait for optional services to become running
+	fmt.Println("  Waiting for optional services to start...")
+	return waitForOptionalServices(60 * time.Second)
+}
+
 // waitForServices waits for all platform services to reach running state
 func waitForServices(timeout time.Duration) error {
 	client := DefaultClient()
@@ -218,6 +292,80 @@ func waitForServices(timeout time.Duration) error {
 
 	fmt.Println()
 	return fmt.Errorf("timeout waiting for services to start")
+}
+
+// waitForMandatoryServices waits for mandatory platform services to reach running state
+func waitForMandatoryServices(timeout time.Duration) error {
+	client := DefaultClient()
+	deadline := time.Now().Add(timeout)
+
+	for time.Now().Before(deadline) {
+		allRunning := true
+
+		for _, svc := range PlatformServices {
+			if !IsMandatoryService(svc.Name) {
+				continue
+			}
+
+			status, err := client.GetJobStatus(svc.Name)
+			if err != nil {
+				allRunning = false
+				break
+			}
+
+			if status == nil || status.Status != "running" {
+				allRunning = false
+				break
+			}
+		}
+
+		if allRunning {
+			return nil
+		}
+
+		time.Sleep(2 * time.Second)
+		fmt.Print(".")
+	}
+
+	fmt.Println()
+	return fmt.Errorf("timeout waiting for mandatory services to start")
+}
+
+// waitForOptionalServices waits for optional platform services to reach running state
+func waitForOptionalServices(timeout time.Duration) error {
+	client := DefaultClient()
+	deadline := time.Now().Add(timeout)
+
+	for time.Now().Before(deadline) {
+		allRunning := true
+
+		for _, svc := range PlatformServices {
+			if !IsOptionalService(svc.Name) {
+				continue
+			}
+
+			status, err := client.GetJobStatus(svc.Name)
+			if err != nil {
+				allRunning = false
+				break
+			}
+
+			if status == nil || status.Status != "running" {
+				allRunning = false
+				break
+			}
+		}
+
+		if allRunning {
+			return nil
+		}
+
+		time.Sleep(2 * time.Second)
+		fmt.Print(".")
+	}
+
+	fmt.Println()
+	return fmt.Errorf("timeout waiting for optional services to start")
 }
 
 // StopAll stops all platform services

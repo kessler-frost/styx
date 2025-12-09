@@ -18,20 +18,22 @@ func GetCPUTotalCompute() int {
 
 // ServerConfig holds the configuration values for a Nomad server node.
 type ServerConfig struct {
-	DataDir         string // e.g., ~/.styx/nomad
-	AdvertiseIP     string // Local IP for cluster communication
-	BootstrapExpect int    // Number of servers to expect (usually 1 for single node)
-	PluginDir       string // Path to task driver plugins
-	CPUTotalCompute int    // Total CPU in MHz for scheduling (auto-detected if 0)
+	DataDir          string // e.g., ~/.styx/nomad
+	AdvertiseIP      string // Local IP for cluster communication
+	BootstrapExpect  int    // Number of servers to expect (usually 1 for single node)
+	PluginDir        string // Path to task driver plugins
+	CPUTotalCompute  int    // Total CPU in MHz for scheduling (auto-detected if 0)
+	ContainerBinPath string // Path to container binary (discovered via PATH)
 }
 
 // ClientConfig holds the configuration values for a Nomad client node.
 type ClientConfig struct {
-	DataDir         string   // e.g., ~/.styx/nomad
-	AdvertiseIP     string   // Local IP for cluster communication
-	Servers         []string // Server IPs to join
-	PluginDir       string   // Path to task driver plugins
-	CPUTotalCompute int      // Total CPU in MHz for scheduling (auto-detected if 0)
+	DataDir          string   // e.g., ~/.styx/nomad
+	AdvertiseIP      string   // Local IP for cluster communication
+	Servers          []string // Server IPs to join
+	PluginDir        string   // Path to task driver plugins
+	CPUTotalCompute  int      // Total CPU in MHz for scheduling (auto-detected if 0)
+	ContainerBinPath string   // Path to container binary (discovered via PATH)
 }
 
 // GenerateServerConfig renders the server HCL template with the given config.

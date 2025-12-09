@@ -61,7 +61,6 @@ styx/
 ### No Backwards Compatibility
 
 - Don't worry about backwards compatibility for existing installations
-- Features should always be enabled (no optional flags for core functionality)
 - Vault and security features are always on
 - Breaking changes are acceptable - this is a development project
 
@@ -108,14 +107,14 @@ The user uses **mise** to install and manage package versions. When a tool needs
 
 - Nomad task driver SDK: `github.com/hashicorp/nomad/plugins/drivers`
 - CLI framework: `github.com/spf13/cobra`
-- Container runtime: `/usr/local/bin/container` (Apple's CLI)
+- Container runtime: `container` CLI (Apple Containers, discovered via PATH)
 - Nomad: `mise install nomad` or `brew install nomad`
 - Vault: `mise install vault` or `brew install vault`
 - Tailscale: https://tailscale.com/download (for cross-node networking and encryption)
 
 ### Apple Container CLI
 
-The Apple Container CLI (`/usr/local/bin/container`) has its own credential store, separate from Docker's. If you hit Docker Hub rate limits (429 Too Many Requests), you need to authenticate using:
+The Apple Container CLI (`container`) has its own credential store, separate from Docker's. If you hit Docker Hub rate limits (429 Too Many Requests), you need to authenticate using:
 
 ```bash
 container registry login -u <docker-username> docker.io
@@ -176,3 +175,23 @@ When implementing plans with multiple independent tasks:
 tags = ["prometheus.scrape=true"]
 ```
 Prometheus uses Nomad Service Discovery to auto-discover tagged services.
+
+### Platform Services
+
+**Mandatory** (deployed automatically by `styx init`):
+- traefik - Ingress controller, required for routing
+
+**Optional** (deployed via `styx services start --all` or `styx services start <name>`):
+- nats - Message queue
+- dragonfly - Redis-compatible cache
+- prometheus - Metrics server
+- loki - Log aggregation
+- grafana - Dashboards
+- promtail - Log shipper
+- postgres - PostgreSQL database
+- rustfs - S3-compatible storage
+
+Commands:
+- `styx services start --all` - Start all optional services
+- `styx services start <name>` - Start a specific service
+- `styx services` - Show status of all services

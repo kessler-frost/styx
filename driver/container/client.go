@@ -16,10 +16,16 @@ type Client struct {
 	binPath string
 }
 
-// NewClient creates a new container client
+// NewClient creates a new container client.
+// If binPath is empty, it looks up "container" in PATH.
 func NewClient(binPath string) *Client {
 	if binPath == "" {
-		binPath = "/usr/local/bin/container"
+		if path, err := exec.LookPath("container"); err == nil {
+			binPath = path
+		} else {
+			// Fallback to just "container" and let exec handle it
+			binPath = "container"
+		}
 	}
 	return &Client{binPath: binPath}
 }

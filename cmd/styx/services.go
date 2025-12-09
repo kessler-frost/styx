@@ -13,37 +13,41 @@ import (
 )
 
 var servicesJSON bool
+var startAll bool
 
 var servicesCmd = &cobra.Command{
 	Use:   "services",
 	Short: "Manage platform services",
 	Long: `Manage Styx platform services.
 
-Messaging & Cache:
-  nats       - Message queue (NATS)
-  dragonfly  - Redis-compatible cache (Dragonfly)
-
-Ingress:
+Mandatory Services (always running):
   traefik    - Ingress controller (Traefik)
 
-Data:
+Optional Services:
+  nats       - Message queue (NATS)
+  dragonfly  - Redis-compatible cache (Dragonfly)
   postgres   - PostgreSQL database
   rustfs     - S3-compatible storage (RustFS)
-
-Observability:
   prometheus - Metrics server
   loki       - Log aggregation
   grafana    - Dashboards
   promtail   - Log shipper
 
-Use 'styx services' to see status of all services.`,
+Use 'styx services' to see status of all services.
+Use 'styx services start --all' to start all optional services.`,
 	RunE: runServicesList,
 }
 
 var servicesStartCmd = &cobra.Command{
-	Use:   "start <service>",
-	Short: "Start a platform service",
-	Args:  cobra.ExactArgs(1),
+	Use:   "start [service]",
+	Short: "Start a platform service or all optional services",
+	Long: `Start a platform service by name, or use --all to start all optional services.
+
+Examples:
+  styx services start nats       # Start NATS
+  styx services start --all      # Start all optional services
+  styx services start -a         # Same as --all`,
+	Args:  cobra.MaximumNArgs(1),
 	RunE:  runServicesStart,
 }
 
@@ -56,6 +60,7 @@ var servicesStopCmd = &cobra.Command{
 
 func init() {
 	servicesCmd.Flags().BoolVar(&servicesJSON, "json", false, "Output in JSON format")
+	servicesStartCmd.Flags().BoolVarP(&startAll, "all", "a", false, "Start all optional services")
 	servicesCmd.AddCommand(servicesStartCmd)
 	servicesCmd.AddCommand(servicesStopCmd)
 	rootCmd.AddCommand(servicesCmd)
@@ -129,6 +134,30 @@ func runServicesList(cmd *cobra.Command, args []string) error {
 }
 
 func runServicesStart(cmd *cobra.Command, args []string) error {
+	// Check if Nomad is running
+	client := services.DefaultClient()
+	if !client.IsHealthy() {
+		return fmt.Errorf("Nomad is not running. Start Styx first with 'styx init'")
+	}
+
+	// Handle --all flag
+	if startAll {
+		if len(args) > 0 {
+			return fmt.Errorf("cannot specify both --all and a service name")
+		}
+		fmt.Println("Starting all optional services...")
+		if err := services.DeployOptional(); err != nil {
+			return fmt.Errorf("failed to start optional services: %w", err)
+		}
+		fmt.Println("All optional services started successfully")
+		return nil
+	}
+
+	// If no args and no --all flag, show helpful message
+	if len(args) == 0 {
+		return fmt.Errorf("specify a service name or use --all to start all optional services\n\nAvailable services: %s", getAvailableServiceNames())
+	}
+
 	name := args[0]
 
 	// Verify it's a known service
@@ -137,10 +166,9 @@ func runServicesStart(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("unknown service: %s\n\nAvailable services: %s", name, getAvailableServiceNames())
 	}
 
-	// Check if Nomad is running
-	client := services.DefaultClient()
-	if !client.IsHealthy() {
-		return fmt.Errorf("Nomad is not running. Start Styx first with 'styx init'")
+	// Check if it's a mandatory service
+	if services.IsMandatoryService(name) {
+		return fmt.Errorf("%s is a mandatory service and is already running (started automatically with 'styx init')", name)
 	}
 
 	fmt.Printf("Starting %s...\n", name)

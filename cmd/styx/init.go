@@ -251,11 +251,12 @@ func runServer() error {
 	// Generate Nomad server config
 	fmt.Println("Generating server configuration...")
 	cfg := config.ServerConfig{
-		DataDir:         dataDir,
-		AdvertiseIP:     ip,
-		BootstrapExpect: 1,
-		PluginDir:       pluginDir,
-		CPUTotalCompute: config.GetCPUTotalCompute(),
+		DataDir:          dataDir,
+		AdvertiseIP:      ip,
+		BootstrapExpect:  1,
+		PluginDir:        pluginDir,
+		CPUTotalCompute:  config.GetCPUTotalCompute(),
+		ContainerBinPath: containerPath,
 	}
 	configContent, err := config.GenerateServerConfig(cfg)
 	if err != nil {
@@ -447,10 +448,10 @@ wait
 		return fmt.Errorf("nomad failed to start: %w\nCheck logs at %s", err, filepath.Join(logDir, "styx.log"))
 	}
 
-	// Deploy platform services
-	fmt.Println("\nDeploying platform services...")
-	if err := services.DeployAll(); err != nil {
-		return fmt.Errorf("failed to deploy platform services: %w", err)
+	// Deploy mandatory services (Traefik)
+	fmt.Println("\nDeploying Traefik ingress controller...")
+	if err := services.DeployMandatory(); err != nil {
+		return fmt.Errorf("failed to deploy Traefik: %w", err)
 	}
 
 	// Enable Tailscale Serve for HTTPS ingress
@@ -464,20 +465,21 @@ wait
 	tsInfo := network.GetTailscaleInfo()
 
 	fmt.Println("\nStyx server started!")
-	fmt.Println("\nPlatform services:")
-	fmt.Println("  NATS:      nats://localhost:4222")
-	fmt.Println("  Dragonfly: redis://localhost:6379")
+	fmt.Println("\nTraefik ingress controller:")
 	if tsInfo.Running {
-		fmt.Printf("  Traefik:   https://%s (ingress)\n", tsInfo.DNSName)
+		fmt.Printf("  HTTPS:     https://%s\n", tsInfo.DNSName)
 	} else {
-		fmt.Println("  Traefik:   http://localhost:4200 (ingress)")
+		fmt.Println("  HTTP:      http://localhost:4200")
 	}
-	fmt.Println("             http://localhost:4201 (dashboard)")
+	fmt.Println("  Dashboard: http://localhost:4201")
+	fmt.Println("\nOptional services:")
+	fmt.Println("  styx services start --all    # Start all optional services")
+	fmt.Println("  styx services start <name>   # Start specific service")
+	fmt.Println("  styx services                # Show available services")
 	fmt.Println("\nTo add more nodes, run on other Macs:")
 	fmt.Println("  styx init")
 	fmt.Println("\nCheck status with:")
 	fmt.Println("  styx status           # Show Styx status")
-	fmt.Println("  styx services         # Show platform services")
 	fmt.Println("  nomad node status     # List Nomad nodes")
 	fmt.Println("\nVault UI:  http://127.0.0.1:8200/ui")
 	fmt.Println("Nomad UI:  http://127.0.0.1:4646")
@@ -557,11 +559,12 @@ func runClient(serverIP string) error {
 	// Generate client config
 	fmt.Println("Generating client configuration...")
 	cfg := config.ClientConfig{
-		DataDir:         dataDir,
-		AdvertiseIP:     ip,
-		Servers:         []string{serverIP},
-		PluginDir:       pluginDir,
-		CPUTotalCompute: config.GetCPUTotalCompute(),
+		DataDir:          dataDir,
+		AdvertiseIP:      ip,
+		Servers:          []string{serverIP},
+		PluginDir:        pluginDir,
+		CPUTotalCompute:  config.GetCPUTotalCompute(),
+		ContainerBinPath: containerPath,
 	}
 	configContent, err := config.GenerateClientConfig(cfg)
 	if err != nil {

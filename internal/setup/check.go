@@ -105,23 +105,22 @@ type tailscaleStatus struct {
 	} `json:"Self"`
 }
 
-// findTailscaleBin finds the tailscale CLI binary path.
+// findTailscaleBin finds the tailscale CLI binary path, preferring PATH lookup.
 func findTailscaleBin() string {
-	// Check common locations
-	paths := []string{
-		"/usr/local/bin/tailscale",
+	// First try PATH lookup
+	if path, err := exec.LookPath("tailscale"); err == nil {
+		return path
+	}
+
+	// Fall back to known macOS locations (e.g., Mac App Store install)
+	knownPaths := []string{
 		"/Applications/Tailscale.app/Contents/MacOS/Tailscale",
 	}
 
-	for _, path := range paths {
-		if _, err := exec.LookPath(path); err == nil {
+	for _, path := range knownPaths {
+		if _, err := exec.Command("test", "-x", path).CombinedOutput(); err == nil {
 			return path
 		}
-	}
-
-	// Try PATH lookup
-	if path, err := exec.LookPath("tailscale"); err == nil {
-		return path
 	}
 
 	return ""

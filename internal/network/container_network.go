@@ -6,6 +6,15 @@ import (
 	"strings"
 )
 
+// getContainerBin returns the path to the container binary by looking it up in PATH
+func getContainerBin() (string, error) {
+	path, err := exec.LookPath("container")
+	if err != nil {
+		return "", fmt.Errorf("container CLI not found in PATH: %w", err)
+	}
+	return path, nil
+}
+
 const (
 	// StyxNetworkName is the name of the container network used by Styx
 	StyxNetworkName = "styx"
@@ -26,7 +35,11 @@ func EnsureStyxNetwork() error {
 	}
 
 	// Create the network
-	cmd := exec.Command("/usr/local/bin/container", "network", "create",
+	containerBin, err := getContainerBin()
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command(containerBin, "network", "create",
 		"--subnet", StyxNetworkSubnet,
 		StyxNetworkName)
 
@@ -49,7 +62,11 @@ func DeleteStyxNetwork() error {
 		return nil
 	}
 
-	cmd := exec.Command("/usr/local/bin/container", "network", "delete", StyxNetworkName)
+	containerBin, err := getContainerBin()
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command(containerBin, "network", "delete", StyxNetworkName)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to delete network: %w\nOutput: %s", err, string(output))
@@ -70,7 +87,11 @@ func NetworkExists() bool {
 
 // networkExists checks if a network with the given name exists
 func networkExists(name string) (bool, error) {
-	cmd := exec.Command("/usr/local/bin/container", "network", "list")
+	containerBin, err := getContainerBin()
+	if err != nil {
+		return false, err
+	}
+	cmd := exec.Command(containerBin, "network", "list")
 	output, err := cmd.Output()
 	if err != nil {
 		return false, fmt.Errorf("failed to list networks: %w", err)
