@@ -14,7 +14,7 @@ Your personal cloud platform built for macOS. Deploy containers, manage secrets,
 ## Installation
 
 ```bash
-curl -fsSL https://styx.leviathan.wtf/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/kessler-frost/styx/main/install.sh | sh
 ```
 
 Or from source: `git clone https://github.com/kessler-frost/styx && cd styx && make build-all`
