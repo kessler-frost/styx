@@ -32,7 +32,7 @@ This command will:
 3. Remove the styx container network
 4. Remove styx data directory (~/.styx)
 5. Remove launchd plist
-6. Remove styx binaries (if installed to ~/.local)
+6. Remove styx binaries (Homebrew or ~/.local installation)
 7. Optionally remove Homebrew-installed dependencies (nomad, vault, container, tailscale)`,
 	RunE: runUninstall,
 }
@@ -90,7 +90,36 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 	_ = launchd.Unload(plistPath)
 	_ = os.Remove(plistPath)
 
-	// 6. Remove binaries (if installed to ~/.local)
+	// 6. Remove styx binaries
+	removeStyxBinaries(home)
+
+	// 7. Handle dependencies
+	fmt.Println()
+	removeDependencies()
+
+	fmt.Println()
+	fmt.Println("Styx uninstalled successfully.")
+	return nil
+}
+
+func removeStyxBinaries(home string) {
+	// Check if installed via Homebrew
+	if isBrewInstalled("kessler-frost/tap/styx", false) {
+		fmt.Println("  Styx is installed via Homebrew.")
+		if uninstallYes || uninstallAll {
+			fmt.Println("  Removing styx via Homebrew...")
+			_ = exec.Command("brew", "uninstall", "styx").Run()
+		} else {
+			fmt.Print("  Remove styx via Homebrew? [y/N]: ")
+			if askConfirm() {
+				fmt.Println("  Removing styx via Homebrew...")
+				_ = exec.Command("brew", "uninstall", "styx").Run()
+			}
+		}
+		return
+	}
+
+	// Otherwise, check for manual installation in ~/.local
 	localBin := filepath.Join(home, ".local", "bin", "styx")
 	localLib := filepath.Join(home, ".local", "lib", "styx")
 	if _, err := os.Stat(localBin); err == nil {
@@ -101,14 +130,6 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 		fmt.Printf("  Removing %s...\n", localLib)
 		_ = os.RemoveAll(localLib)
 	}
-
-	// 7. Handle dependencies
-	fmt.Println()
-	removeDependencies()
-
-	fmt.Println()
-	fmt.Println("Styx uninstalled successfully.")
-	return nil
 }
 
 func removeContainersAndVolumes() {
