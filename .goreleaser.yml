@@ -46,3 +46,26 @@ changelog:
       - '^docs:'
       - '^chore:'
       - '^ci:'
+
+brews:
+  - ids: [styx-archive]
+    repository:
+      owner: kessler-frost
+      name: homebrew-tap
+    directory: Formula
+    homepage: "https://github.com/kessler-frost/styx"
+    description: "Personal cloud platform for macOS"
+    license: "Apache-2.0"
+    install: |
+      bin.install "styx"
+      (lib/"styx/plugins").install "apple-container"
+    caveats: |
+      The Nomad driver plugin has been installed to:
+        #{lib}/styx/plugins/apple-container
+
+      Configure Nomad to find it by adding to your Nomad config:
+        plugin_dir = "#{lib}/styx/plugins"
+
+      Or run 'styx init' which handles this automatically.
+    test: |
+      system "#{bin}/styx", "version"
