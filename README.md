@@ -6,6 +6,21 @@
 
 Your personal cloud platform built for macOS. Deploy containers, manage secrets, and scale across multiple machines—no Docker required.
 
+## What is Styx?
+
+Styx is the glue layer that connects Nomad, Vault, Apple Containers, and Tailscale into a personal cloud platform. It handles the tedious setup—generating configs, managing launchd services, initializing Vault, wiring up networking—so you don't have to.
+
+**The underlying tools work exactly as documented.** You use `nomad` to deploy jobs, `vault` to manage secrets, and standard Nomad job specs to define workloads. Styx just removes the 20 manual steps needed to get them working together on macOS.
+
+**What Styx provides:**
+- **One-command cluster bootstrap** - `styx init` sets up Nomad + Vault with proper configs
+- **Apple Container driver** - A Nomad task driver for Apple's native container runtime
+- **Traefik ingress** - Auto-deployed gateway for accessing services (HTTP at `:4200`, plus TCP routing for NATS/Redis)
+- **Multi-machine clustering** - Auto-discovers nodes via Tailscale, handles server/client setup
+- **Platform services** - Pre-configured jobs for databases, caches, and observability
+
+No Docker, no Kubernetes. Just lightweight Apple containers orchestrated by Nomad.
+
 ## Requirements
 
 - macOS 26+ (Tahoe) with Apple Silicon
@@ -154,10 +169,87 @@ flowchart LR
 
 See `example/` for sample Nomad jobs: `alpine.nomad`, `nginx.nomad`, `nginx-vault.nomad`
 
-## Uninstall
+## Commands
+
+### `styx init`
+Start or join a Styx cluster.
 
 ```bash
-styx uninstall
+styx init              # Auto-discover servers on Tailscale, prompt to join or start new
+styx init --serve      # Force server mode (Nomad server + Vault)
+styx init --join <ip>  # Join existing cluster as client
+```
+
+### `styx stop`
+Stop Styx services on the current node. Gracefully stops all jobs first.
+
+### `styx status`
+Show cluster status including service health, Vault status, node mode, and cluster members.
+
+```bash
+styx status        # Human-readable output
+styx status --json # JSON output
+```
+
+### `styx services`
+Manage platform services.
+
+```bash
+styx services                    # List all services and their status
+styx services start --all        # Start all optional services
+styx services start <name>       # Start a specific service (nats, dragonfly, postgres, etc.)
+styx services stop <name>        # Stop a service
+```
+
+**Available services:** traefik (required), nats, dragonfly, postgres, rustfs, prometheus, loki, grafana, promtail
+
+### `styx jobs`
+List all Nomad jobs and their allocations.
+
+```bash
+styx jobs        # Human-readable output
+styx jobs --json # JSON output
+```
+
+### `styx nodes`
+List all cluster nodes.
+
+```bash
+styx nodes        # Human-readable output
+styx nodes --json # JSON output
+```
+
+### `styx system`
+Container system management.
+
+```bash
+styx system df     # Show disk usage for images, containers, volumes
+styx system prune  # Remove unused images
+styx system reset  # Full cleanup: stop containers, remove volumes, prune images
+```
+
+### `styx chaos`
+Run chaos tests to verify cluster resilience.
+
+```bash
+styx chaos --all       # Run all chaos tests
+styx chaos --agent     # Test Nomad agent kill/recovery
+styx chaos --services  # Test platform service kill/restart
+styx chaos --container # Test container runtime availability
+styx chaos --rejoin    # Test cluster membership verification
+```
+
+### `styx version`
+Print version information.
+
+### `styx uninstall`
+Completely remove Styx and its data.
+
+```bash
+styx uninstall             # Interactive uninstall
+styx uninstall -y          # Skip confirmation
+styx uninstall --all       # Also remove dependencies (nomad, vault, etc.)
+styx uninstall --keep-data # Keep ~/.styx data directory
 ```
 
 ## License
