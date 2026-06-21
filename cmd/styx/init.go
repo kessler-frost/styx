@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -75,11 +76,27 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 
 	if joinIP != "" {
+		if err := validateJoinIP(joinIP); err != nil {
+			return err
+		}
 		return runClient(joinIP)
 	}
 
 	// Auto-discover mode
 	return runAutoDiscover()
+}
+
+// validateJoinIP ensures the --join value is a syntactically valid IP address.
+// It rejects empty values, hostnames, and "ip:port" forms so a malformed flag
+// fails fast instead of producing confusing downstream connection errors.
+func validateJoinIP(ip string) error {
+	if strings.TrimSpace(ip) != ip || ip == "" {
+		return fmt.Errorf("invalid --join address %q: must be a bare IP address", ip)
+	}
+	if net.ParseIP(ip) == nil {
+		return fmt.Errorf("invalid --join address %q: not a valid IP address", ip)
+	}
+	return nil
 }
 
 // runAutoDiscover probes Tailscale peers for Nomad servers
@@ -169,16 +186,18 @@ func copyPluginToDir(pluginDir string) error {
 	}
 
 	pluginDst := filepath.Join(pluginDir, "apple-container")
-	if _, err := os.Stat(pluginSrc); err == nil {
-		fmt.Printf("Copying plugin from %s to %s\n", pluginSrc, pluginDst)
-		if err := copyFile(pluginSrc, pluginDst); err != nil {
-			return fmt.Errorf("failed to copy plugin: %w", err)
-		}
-		if err := os.Chmod(pluginDst, 0755); err != nil {
-			return fmt.Errorf("failed to set plugin permissions: %w", err)
-		}
-	} else {
-		fmt.Printf("Warning: plugin not found at %s\n", pluginSrc)
+	if _, err := os.Stat(pluginSrc); err != nil {
+		// The container task driver plugin is required: without it Nomad cannot
+		// run any container workloads, so fail loudly instead of continuing.
+		return fmt.Errorf("apple-container plugin not found at %s: %w", pluginSrc, err)
+	}
+
+	fmt.Printf("Copying plugin from %s to %s\n", pluginSrc, pluginDst)
+	if err := copyFile(pluginSrc, pluginDst); err != nil {
+		return fmt.Errorf("failed to copy plugin: %w", err)
+	}
+	if err := os.Chmod(pluginDst, 0755); err != nil {
+		return fmt.Errorf("failed to set plugin permissions: %w", err)
 	}
 	return nil
 }

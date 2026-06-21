@@ -61,9 +61,12 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 
 	fmt.Println("Uninstalling styx...")
 
-	// 1. Stop services (ignore errors - may not be running)
+	// 1. Stop services. Failures here are non-fatal (the service may not be
+	// running), but surface them so a stuck job isn't silently left behind.
 	fmt.Println("  Stopping services...")
-	_ = runStop(nil, nil)
+	if err := runStop(nil, nil); err != nil {
+		fmt.Printf("    Warning: could not cleanly stop services: %v\n", err)
+	}
 
 	// 2. Remove containers, volumes
 	fmt.Println("  Removing containers and volumes...")
@@ -84,11 +87,14 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// 5. Remove plist
+	// 5. Remove plist. Unload may fail if the service was never loaded; only
+	// the file removal error is worth surfacing.
 	plistPath := filepath.Join(home, "Library", "LaunchAgents", "com.styx.nomad.plist")
 	fmt.Printf("  Removing %s...\n", plistPath)
 	_ = launchd.Unload(plistPath)
-	_ = os.Remove(plistPath)
+	if err := os.Remove(plistPath); err != nil && !os.IsNotExist(err) {
+		fmt.Printf("    Warning: could not remove plist: %v\n", err)
+	}
 
 	// 6. Remove styx binaries
 	removeStyxBinaries(home)

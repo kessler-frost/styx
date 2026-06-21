@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -72,21 +73,78 @@ func (h *taskHandle) run() {
 		case <-h.ctx.Done():
 			return
 		case <-ticker.C:
-			running := h.client.IsRunning(h.ctx, h.containerID)
-			if !running {
+			// Inspect the container to determine its real state. Relying on a
+			// bare "is it running?" boolean previously caused every exit to be
+			// reported as a clean ExitCode 0, even for crashes.
+			info, err := h.client.Inspect(h.ctx, h.containerID)
+			if !isRunningInfo(info, err) {
+				result := classifyExit(info, err)
 				h.stateLock.Lock()
-				h.exitResult = &drivers.ExitResult{
-					ExitCode:  0,
-					Signal:    0,
-					OOMKilled: false,
-					Err:       nil,
-				}
+				h.exitResult = result
 				h.stateLock.Unlock()
-				h.logger.Info("container exited")
+				h.logger.Info("container exited",
+					"status", inspectStatus(info, err),
+					"exit_code", result.ExitCode)
 				return
 			}
 		}
 	}
+}
+
+// isRunningInfo reports whether an inspect result indicates the container is
+// still running. A failed inspect (err != nil) means the container can no
+// longer be found and is therefore not running.
+func isRunningInfo(info *container.ContainerInfo, err error) bool {
+	return err == nil && info != nil && info.Status == "running"
+}
+
+// inspectStatus returns a human-readable status string for logging.
+func inspectStatus(info *container.ContainerInfo, err error) string {
+	if err != nil {
+		return "uninspectable"
+	}
+	if info == nil {
+		return "unknown"
+	}
+	return info.Status
+}
+
+// classifyExit maps a container's final inspect result to a Nomad ExitResult.
+//
+// Apple's `container inspect` does not surface a numeric process exit code, so
+// this captures the next best signal: a container that reached the "stopped"
+// state cleanly is treated as a successful exit (code 0), while a container
+// that crashed, was OOM-killed, or can no longer be inspected is reported as a
+// failure (non-zero) so Nomad can apply its restart policy instead of silently
+// treating the crash as success.
+func classifyExit(info *container.ContainerInfo, err error) *drivers.ExitResult {
+	if err != nil || info == nil {
+		// Container vanished or could not be inspected: treat as a failure so
+		// the outcome isn't silently swallowed as success.
+		return &drivers.ExitResult{
+			ExitCode: -1,
+			Err:      fmt.Errorf("container exited but could not be inspected: %w", errOrUnknown(err)),
+		}
+	}
+
+	switch info.Status {
+	case "stopped", "exited":
+		return &drivers.ExitResult{ExitCode: 0}
+	default:
+		// Any non-running, non-clean status (e.g. "error", "failed") is a crash.
+		return &drivers.ExitResult{
+			ExitCode: 1,
+			Err:      fmt.Errorf("container terminated in state %q", info.Status),
+		}
+	}
+}
+
+// errOrUnknown returns err, or a sentinel error when err is nil.
+func errOrUnknown(err error) error {
+	if err != nil {
+		return err
+	}
+	return fmt.Errorf("unknown error")
 }
 
 // shutdown stops monitoring the container and cancels all background operations.

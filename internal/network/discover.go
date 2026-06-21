@@ -3,6 +3,7 @@ package network
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"sync"
 	"time"
@@ -64,17 +65,22 @@ func isNomadServer(client *http.Client, ip string) bool {
 		return false
 	}
 
-	// Parse response to verify it's a server (has members)
+	return hasNomadMembers(resp.Body)
+}
+
+// hasNomadMembers reports whether the body of a Nomad /v1/agent/members
+// response describes a server (i.e. it parses and contains at least one
+// member). A server always lists at least itself.
+func hasNomadMembers(body io.Reader) bool {
 	var result struct {
 		Members []struct {
 			Name string `json:"Name"`
 		} `json:"Members"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.NewDecoder(body).Decode(&result); err != nil {
 		return false
 	}
 
-	// A server will have at least itself in the members list
 	return len(result.Members) > 0
 }
