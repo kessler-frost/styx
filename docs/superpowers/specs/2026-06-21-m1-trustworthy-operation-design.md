@@ -1,7 +1,7 @@
 # Styx M1 — Trustworthy Single-Cluster Operation (design)
 
 **Date:** 2026-06-21
-**Status:** Approved design, pending implementation plan
+**Status:** PARKED (2026-06-21) — partially superseded, pending an orchestrator decision. Nomad is **BUSL-1.1** (non-permissive, violates the project's permissive-only rule — same as Vault). Removing Nomad is now under consideration, which would moot the "Nomad native variables" secrets choice in Workstream A and rearchitect M1's core. **Decision: map orchestration use cases first** (which workloads styx must actually run) before choosing a replacement path. Owner plans to tackle the orchestrator build later. styx work paused until then. The hardening *principles* here (rollback, graceful shutdown, log rotation, health-check backoff, CI, mock tests) survive any orchestrator choice.
 **Milestone:** M1 of a two-milestone roadmap. M2 (container-machine workloads) is a separate spec built on this.
 
 ## Goal
